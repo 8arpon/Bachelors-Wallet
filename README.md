@@ -38,8 +38,6 @@ This project serves as a showcase of the power of **Generative AI** in modern so
 
 ## 📸 Screenshots
 
-## 📸 Screenshots
-
 <p align="center">
   <img src="https://github.com/user-attachments/assets/551e36a5-d056-43a0-831c-4b0ad1ddf951" width="200" title="Home Dashboard">
   <img src="https://github.com/user-attachments/assets/1edb811d-0057-4cc4-b685-e73a11bfaa64" width="200" title="Budget Planner">
