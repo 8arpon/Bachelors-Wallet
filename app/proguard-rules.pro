@@ -19,3 +19,18 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# GSON specific rules
+-keepattributes Signature
+-keepattributes *Annotation*
+-dontwarn sun.misc.**
+-keep class com.google.gson.** { *; }
+
+# Keep your data model classes
+-keep class com.example.myapplication.DailyExpense { *; }
+-keep class com.example.myapplication.DebtItem { *; }
+-keep class com.example.myapplication.PaymentRecord { *; }
+-keep class com.example.myapplication.DebtType { *; }
+
+-keep class androidx.biometric.** { *; }
+-dontwarn androidx.biometric.**

@@ -1,24 +1,22 @@
 package com.example.myapplication
 
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.TextRange
+import android.Manifest
+import android.app.Activity
 import android.app.DatePickerDialog
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
-import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -46,15 +44,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -68,9 +70,10 @@ enum class ExpenseCategory(val label: String, val emoji: String, val color: Colo
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         enableEdgeToEdge()
 
-        val prefs = getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences("app_settings", MODE_PRIVATE)
         ThemeState.isDark.value = prefs.getBoolean("dark_mode", false)
 
         setContent {
@@ -85,15 +88,44 @@ class MainActivity : FragmentActivity() {
 
 @Composable
 fun MainApp() {
+    val context = LocalContext.current
     val navController = rememberNavController()
+    val globalBgColor = if (ThemeState.isDark.value) Color(0xFF121212) else Color(0xFFF8F9FA)
+
+    val view = androidx.compose.ui.platform.LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val activity = view.context as? Activity
+            if (activity != null) {
+                val window = activity.window
+                val insetsController = androidx.core.view.WindowCompat.getInsetsController(window, view)
+                insetsController.isAppearanceLightStatusBars = !ThemeState.isDark.value
+                insetsController.isAppearanceLightNavigationBars = !ThemeState.isDark.value
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        val prefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+        val isFirstTime = prefs.getBoolean("first_time_permission_asked", true)
+
+        if (isFirstTime && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                delay(1500)
+                val activity = context as? Activity
+                activity?.let {
+                    ActivityCompat.requestPermissions(it, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
+                }
+                prefs.edit().putBoolean("first_time_permission_asked", false).apply()
+            }
+        }
+    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF8F9FA))
-            .navigationBarsPadding()
+            .background(globalBgColor)
     ) {
-
         NavHost(
             navController = navController,
             startDestination = "home",
@@ -113,7 +145,8 @@ fun MainApp() {
             navController = navController,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 6.dp)
+                .navigationBarsPadding()
+                .padding(bottom = 16.dp)
         )
     }
 }
@@ -123,12 +156,14 @@ fun FloatingNavBar(navController: NavController, modifier: Modifier = Modifier) 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
+    val navBarColor = if (ThemeState.isDark.value) Color(0xFF1E1E1E) else Color.White
+
     Surface(
         modifier = modifier
             .fillMaxWidth(0.95f)
             .shadow(12.dp, CircleShape),
         shape = CircleShape,
-        color = Color.White
+        color = navBarColor
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -198,7 +233,6 @@ fun RowScope.NavItem(icon: ImageVector, title: String, isSelected: Boolean, onCl
 fun BudgetPlannerScreen(navController: NavController) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
-
     val scrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
 
@@ -213,13 +247,12 @@ fun BudgetPlannerScreen(navController: NavController) {
         allDebts = DataManager.getDebts(context)
     }
 
-    // HIGHLIGHT: Accurate Monthly Calculation
     val totalReceived = ExpenseCalculator.getThisMonthIncome(allExpenses)
     val totalSpent = ExpenseCalculator.getThisMonthExpense(allExpenses)
     val currentBalance = ExpenseCalculator.getThisMonthBalance(allExpenses, allDebts)
 
-    var incomeInput by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue("")) }
-    var expenseInput by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue("")) }
+    var incomeInput by remember { mutableStateOf(TextFieldValue("")) }
+    var expenseInput by remember { mutableStateOf(TextFieldValue("")) }
 
     var selectedCategory by remember { mutableStateOf(ExpenseCategory.BREAKFAST) }
     var successMessage by remember { mutableStateOf("") }
@@ -259,17 +292,18 @@ fun BudgetPlannerScreen(navController: NavController) {
     }
 
     LaunchedEffect(incomeDate, expenseDate, selectedCategory, allExpenses) { updateHints() }
-    LaunchedEffect(successMessage) { if (successMessage.isNotEmpty()) { kotlinx.coroutines.delay(2500); successMessage = "" } }
+    LaunchedEffect(successMessage) { if (successMessage.isNotEmpty()) {
+        delay(2500); successMessage = "" } }
 
     fun handleSave(isIncome: Boolean, amount: Double, op: SaveOp) {
         if (isIncome) {
             DataManager.addIncome(context, incomeDate, amount, op)
             successMessage = "Income Saved!"
-            incomeInput = androidx.compose.ui.text.input.TextFieldValue("")
+            incomeInput = TextFieldValue("")
         } else {
             DataManager.addExpense(context, expenseDate, selectedCategory, amount, op)
             successMessage = "Expense Saved!"
-            expenseInput = androidx.compose.ui.text.input.TextFieldValue("")
+            expenseInput = TextFieldValue("")
         }
         allExpenses = DataManager.getExpenses(context)
         focusManager.clearFocus()
@@ -312,7 +346,6 @@ fun BudgetPlannerScreen(navController: NavController) {
         }
     }
 
-    val bgColor = if (ThemeState.isDark.value) Color(0xFF121212) else Color(0xFFF8F9FA)
     val cardColor = if (ThemeState.isDark.value) Color(0xFF1E1E1E) else Color.White
     val textColor = if (ThemeState.isDark.value) Color.White else Color.Black
     val iconBgColor = if (ThemeState.isDark.value) Color(0xFF1E1E1E) else Color.White
@@ -320,16 +353,15 @@ fun BudgetPlannerScreen(navController: NavController) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(bgColor)
             .pointerInput(Unit) { detectTapGestures(onTap = { focusManager.clearFocus() }) }
             .statusBarsPadding()
             .verticalScroll(scrollState)
             .padding(horizontal = 20.dp)
-            .navigationBarsPadding()
-            .imePadding()
+            .padding(top = 10.dp)
+            .padding(bottom = 90.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -355,12 +387,12 @@ fun BudgetPlannerScreen(navController: NavController) {
         Box(
             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(25.dp))
                 .background(Brush.linearGradient(listOf(Color(0xFF4400E0), Color(0xFF8E2DE2))))
-                .padding(25.dp)
+                .padding(20.dp)
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("Current Balance", color = Color.White.copy(alpha = 0.8f))
                 Text("৳${String.format("%.2f", currentBalance)}", color = Color.White, fontSize = 36.sp, fontWeight = FontWeight.Bold)
-                HorizontalDivider(modifier = Modifier.padding(vertical = 20.dp), color = Color.White.copy(alpha = 0.2f))
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Color.White.copy(alpha = 0.2f))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     StatItem("Received", "৳${totalReceived.toInt()}", Color.Green)
                     StatItem("Spent", "৳${totalSpent.toInt()}", Color.Red)
@@ -368,7 +400,7 @@ fun BudgetPlannerScreen(navController: NavController) {
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         // INCOME CARD
         Card(
@@ -398,7 +430,7 @@ fun BudgetPlannerScreen(navController: NavController) {
                             .focusRequester(incomeFocusRequester)
                             .onFocusChanged { focusState -> isIncomeFocused = focusState.isFocused },
                         shape = RoundedCornerShape(12.dp),
-                        keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         colors = OutlinedTextFieldDefaults.colors(focusedTextColor = textColor, unfocusedTextColor = textColor)
                     )
 
@@ -411,7 +443,7 @@ fun BudgetPlannerScreen(navController: NavController) {
                             AnimatedVisibility(visible = currentSavedIncome > 0 && incomeInput.text.isEmpty()) {
                                 Box(modifier = Modifier.height(56.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF007AFF)).clickable {
                                     val str = if (currentSavedIncome % 1.0 == 0.0) currentSavedIncome.toInt().toString() else currentSavedIncome.toString()
-                                    incomeInput = androidx.compose.ui.text.input.TextFieldValue(text = str, selection = androidx.compose.ui.text.TextRange(str.length))
+                                    incomeInput = TextFieldValue(text = str, selection = TextRange(str.length))
                                     incomeFocusRequester.requestFocus()
                                 }.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
                                     Text("Edit", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
@@ -432,7 +464,7 @@ fun BudgetPlannerScreen(navController: NavController) {
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         // EXPENSE CARD
         Card(
@@ -440,7 +472,7 @@ fun BudgetPlannerScreen(navController: NavController) {
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = cardColor)
         ) {
-            Column(modifier = Modifier.padding(20.dp)) {
+            Column(modifier = Modifier.padding(16.dp)) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text("Expense Entry", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = textColor)
                     DatePill(dateText = displayFormatter.format(expenseDate)) {
@@ -448,11 +480,11 @@ fun BudgetPlannerScreen(navController: NavController) {
                     }
                 }
 
-                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 15.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                     ExpenseCategory.entries.forEach { category ->
                         CategoryCircle(category = category, isSelected = selectedCategory == category, onClick = {
                             selectedCategory = category
-                            expenseInput = androidx.compose.ui.text.input.TextFieldValue("")
+                            expenseInput = TextFieldValue("")
                         })
                     }
                 }
@@ -471,7 +503,7 @@ fun BudgetPlannerScreen(navController: NavController) {
                             .focusRequester(expenseFocusRequester)
                             .onFocusChanged { focusState -> isExpenseFocused = focusState.isFocused },
                         shape = RoundedCornerShape(12.dp),
-                        keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         colors = OutlinedTextFieldDefaults.colors(focusedTextColor = textColor, unfocusedTextColor = textColor)
                     )
 
@@ -484,7 +516,7 @@ fun BudgetPlannerScreen(navController: NavController) {
                             AnimatedVisibility(visible = currentSavedExpense > 0 && expenseInput.text.isEmpty()) {
                                 Box(modifier = Modifier.height(56.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF007AFF)).clickable {
                                     val str = if (currentSavedExpense % 1.0 == 0.0) currentSavedExpense.toInt().toString() else currentSavedExpense.toString()
-                                    expenseInput = androidx.compose.ui.text.input.TextFieldValue(text = str, selection = androidx.compose.ui.text.TextRange(str.length))
+                                    expenseInput = TextFieldValue(text = str, selection = TextRange(str.length))
                                     expenseFocusRequester.requestFocus()
                                 }.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
                                     Text("Edit", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
@@ -506,38 +538,54 @@ fun BudgetPlannerScreen(navController: NavController) {
         }
 
         AnimatedVisibility(visible = successMessage.isNotEmpty()) {
-            Box(modifier = Modifier.fillMaxWidth().padding(top = 20.dp), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), contentAlignment = Alignment.Center) {
                 Surface(color = Color(0xFFE8F5E9), shape = RoundedCornerShape(8.dp)) {
                     Text(successMessage, color = Color(0xFF2E7D32), modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 }
             }
         }
-
-        Spacer(modifier = Modifier.height(60.dp))
     }
 }
 
 @Composable
 fun DatePill(dateText: String, onClick: () -> Unit) {
-    Surface(color = Color(0xFFE3F2FD), shape = RoundedCornerShape(8.dp), modifier = Modifier.clickable { onClick() }) {
+    // HIGHLIGHT: ডার্ক এবং লাইট মোডের জন্য আলাদা অ্যাসথেটিক কালার
+    val bgColor = if (ThemeState.isDark.value) Color(0xFF007AFF).copy(alpha = 0.15f) else Color(0xFFE3F2FD)
+    val textColor = if (ThemeState.isDark.value) Color(0xFF64B5F6) else Color(0xFF1976D2)
+
+    Surface(color = bgColor, shape = RoundedCornerShape(8.dp), modifier = Modifier.clickable { onClick() }) {
         Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("📅 ", fontSize = 12.sp)
-            Text(text = dateText, color = Color(0xFF1976D2), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text(text = dateText, color = textColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
 
-fun showDatePicker(context: android.content.Context, onDateSelected: (Date) -> Unit) {
+fun showDatePicker(context: Context, onDateSelected: (Date) -> Unit) {
     val calendar = Calendar.getInstance()
-    DatePickerDialog(context, { _, year, month, day ->
-        val selected = Calendar.getInstance().apply { set(year, month, day) }
-        onDateSelected(selected.time)
-    }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)).show()
+
+    // HIGHLIGHT: নেটিভ পপ-আপ ক্যালেন্ডারকেও ডার্ক/লাইট মোডের সাথে সিঙ্ক করা হয়েছে
+    val themeRes = if (ThemeState.isDark.value) android.R.style.Theme_DeviceDefault_Dialog else android.R.style.Theme_DeviceDefault_Light_Dialog
+
+    DatePickerDialog(
+        context,
+        themeRes,
+        { _, year, month, day ->
+            val selected = Calendar.getInstance().apply { set(year, month, day) }
+            onDateSelected(selected.time)
+        },
+        calendar.get(Calendar.YEAR),
+        calendar.get(Calendar.MONTH),
+        calendar.get(Calendar.DAY_OF_MONTH)
+    ).show()
 }
 
 @Composable
 fun CategoryCircle(category: ExpenseCategory, isSelected: Boolean, onClick: () -> Unit) {
-    val bgColor by animateColorAsState(if (isSelected) category.color else Color(0xFFF1F3F5), label = "")
+    // HIGHLIGHT: Ekhon dark mode e unselected icon er background aesthetic dark-gray thakbe!
+    val unselectedBg = if (ThemeState.isDark.value) Color(0xFF2C2C2E) else Color(0xFFF1F3F5)
+    val bgColor by animateColorAsState(if (isSelected) category.color else unselectedBg, label = "")
+
     Box(modifier = Modifier.size(60.dp).clip(CircleShape).background(bgColor).clickable { onClick() }, contentAlignment = Alignment.Center) {
         Text(category.emoji, fontSize = 24.sp)
     }

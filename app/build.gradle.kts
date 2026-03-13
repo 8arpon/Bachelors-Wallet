@@ -14,9 +14,12 @@ android {
         minSdk = 24
         targetSdk = 36
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.1"
+
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+
     }
 
     buildTypes {
@@ -58,4 +61,8 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.7.7")
     // HIGHLIGHT: Added Gson for Central Database
     implementation("com.google.code.gson:gson:2.10.1")
+}
+
+base {
+    archivesName.set("Bachelors-Wallet-v1.0.1")
 }

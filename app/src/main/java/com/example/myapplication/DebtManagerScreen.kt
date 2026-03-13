@@ -1,5 +1,7 @@
 package com.example.myapplication
 
+
+import androidx.annotation.Keep // <-- এই লাইনটি ইম্পোর্ট করো
 import android.app.DatePickerDialog
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.animation.*
@@ -44,7 +46,9 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 enum class DebtType { I_OWE, THEY_OWE }
+@Keep
 data class PaymentRecord(val amount: Double, val date: Date = Date())
+@Keep // <-- HIGHLIGHT
 data class DebtItem(
     val id: String = UUID.randomUUID().toString(),
     val name: String,

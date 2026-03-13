@@ -10,8 +10,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.animation.AnimatedVisibility
@@ -63,11 +61,11 @@ fun SettingsScreen(navController: NavController) {
 
     // States
     var isDarkMode by remember { mutableStateOf(prefs.getBoolean("dark_mode", false)) }
-    var notificationTime by remember { mutableStateOf(prefs.getString("notif_time", "Not Set")!!) }
+    var notificationTime by remember { mutableStateOf(prefs.getString("notif_time", "Not Set") ?: "Not Set") }
     var showAppInfo by remember { mutableStateOf(false) }
     var showDevInfo by remember { mutableStateOf(false) }
 
-    // HIGHLIGHT: Security States
+    // Security States
     var currentSavedPassword by remember { mutableStateOf(prefs.getString("app_password", "") ?: "") }
     var showPasswordDialog by remember { mutableStateOf(false) }
     var oldPassInput by remember { mutableStateOf("") }
@@ -85,18 +83,8 @@ fun SettingsScreen(navController: NavController) {
     val textColor = if (ThemeState.isDark.value) Color.White else Color.Black
     val iconColor = if (ThemeState.isDark.value) Color.White else Color.Black
 
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-        onResult = { }
-    )
-
-    LaunchedEffect(Unit) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
-        }
-    }
+    // Notification State
+    var isNotifEnabled by remember { mutableStateOf(prefs.getBoolean("notif_enabled", true)) }
 
     val calendar = Calendar.getInstance()
     val timePickerDialog = TimePickerDialog(
@@ -174,11 +162,6 @@ fun SettingsScreen(navController: NavController) {
         Spacer(modifier = Modifier.height(30.dp))
 
         // --- PREFERENCES SECTION ---
-        // SettingsScreen.kt er vitore state variable e eta add korbe (isDarkMode er pore)
-        var isNotifEnabled by remember { mutableStateOf(prefs.getBoolean("notif_enabled", true)) }
-
-
-        // --- PREFERENCES SECTION ---
         Text("PREFERENCES", fontSize = 13.sp, color = Color.Gray, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 10.dp, bottom = 8.dp))
         Surface(shape = RoundedCornerShape(16.dp), color = cardColor, shadowElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
             Column {
@@ -199,7 +182,7 @@ fun SettingsScreen(navController: NavController) {
 
                 HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f), modifier = Modifier.padding(start = 50.dp))
 
-                // HIGHLIGHT: Notification ON/OFF Switch
+                // HIGHLIGHT: Notification Switch 100% Bug Free Redirect
                 Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Notifications, contentDescription = null, tint = Color(0xFFFF9500))
                     Spacer(modifier = Modifier.width(16.dp))
@@ -208,11 +191,33 @@ fun SettingsScreen(navController: NavController) {
                     Switch(
                         checked = isNotifEnabled,
                         onCheckedChange = { isEnabled ->
-                            isNotifEnabled = isEnabled
-                            prefs.edit().putBoolean("notif_enabled", isEnabled).apply()
+                            if (isEnabled) {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
 
-                            // Jodi OFF kore dey, alarm cancel hobe
-                            if (!isEnabled) {
+                                    Toast.makeText(context, "Please Allow Notifications from Settings", Toast.LENGTH_LONG).show()
+
+                                    try {
+                                        // Open App Notification Settings Directly
+                                        val intent = Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                            putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                        }
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        // Fallback to normal settings
+                                        val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                            data = android.net.Uri.parse("package:${context.packageName}")
+                                        }
+                                        context.startActivity(intent)
+                                    }
+                                    isNotifEnabled = false
+                                } else {
+                                    isNotifEnabled = true
+                                    prefs.edit().putBoolean("notif_enabled", true).apply()
+                                }
+                            } else {
+                                isNotifEnabled = false
+                                prefs.edit().putBoolean("notif_enabled", false).apply()
                                 val intent = Intent(context, NotificationReceiver::class.java)
                                 val pendingIntent = PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
                                 val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
@@ -223,7 +228,7 @@ fun SettingsScreen(navController: NavController) {
                     )
                 }
 
-                // Time picker row (Sudhu ON thaklei kaaj korbe)
+                // Time picker row
                 AnimatedVisibility(visible = isNotifEnabled) {
                     Column {
                         HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f), modifier = Modifier.padding(start = 50.dp))
@@ -240,6 +245,7 @@ fun SettingsScreen(navController: NavController) {
                         HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f), modifier = Modifier.padding(start = 50.dp))
                         Row(modifier = Modifier.fillMaxWidth().clickable {
                             context.sendBroadcast(Intent(context, NotificationReceiver::class.java))
+                            Toast.makeText(context, "Sending Test Notification...", Toast.LENGTH_SHORT).show()
                         }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Send, contentDescription = null, tint = Color(0xFF34C759))
                             Spacer(modifier = Modifier.width(16.dp))
@@ -252,7 +258,7 @@ fun SettingsScreen(navController: NavController) {
 
         Spacer(modifier = Modifier.height(30.dp))
 
-        // --- SECURITY SECTION (NEW) ---
+        // --- SECURITY SECTION ---
         Text("SECURITY", fontSize = 13.sp, color = Color.Gray, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 10.dp, bottom = 8.dp))
         Surface(shape = RoundedCornerShape(16.dp), color = cardColor, shadowElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
             Row(
@@ -288,8 +294,8 @@ fun SettingsScreen(navController: NavController) {
                     }
                     AnimatedVisibility(visible = showAppInfo, enter = expandVertically(), exit = shrinkVertically()) {
                         Column(modifier = Modifier.padding(top = 10.dp, start = 40.dp)) {
-                            Text("My Wallet App", fontWeight = FontWeight.Bold, color = textColor)
-                            Text("Version: 1.0.0 (Beta)", color = Color.Gray, fontSize = 14.sp)
+                            Text("Bachelor's Wallet", fontWeight = FontWeight.Bold, color = textColor)
+                            Text("Version: 1.0.1", color = Color.Gray, fontSize = 14.sp)
                         }
                     }
                 }
@@ -437,7 +443,6 @@ fun SettingsScreen(navController: NavController) {
                             ) { Icon(Icons.Default.Lock, contentDescription = "Biometric Unlock", tint = Color(0xFF007AFF)) }
                         }
                     } else {
-                        // HIGHLIGHT: If no password is set, show a large Biometric Button
                         Text("Authentication required to continue.", color = Color.Gray, fontSize = 12.sp)
                         Spacer(modifier = Modifier.height(10.dp))
                         Button(

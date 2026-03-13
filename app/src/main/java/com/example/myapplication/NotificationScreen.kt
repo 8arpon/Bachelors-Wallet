@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -41,20 +42,9 @@ fun NotificationScreen(navController: NavController) {
     val textColor = if (ThemeState.isDark.value) Color.White else Color.Black
     val iconColor = if (ThemeState.isDark.value) Color.White else Color.Black
 
-    // Generating Dummy Data for Last 7 Days
-    val notifications = remember {
-        val currentTime = System.currentTimeMillis()
-        val oneDay = 86400000L
-
-        listOf(
-            // HIGHLIGHT: Fixed Argument Type Mismatch by specifying parameter names
-            AppNotification(title = "Reminder", message = "Don't forget to log your breakfast expense!", timestamp = currentTime - (2 * 3600000L), isRead = false),
-            AppNotification(title = "Daily Summary", message = "You spent ৳350 yesterday. Tap to see details.", timestamp = currentTime - oneDay, isRead = true),
-            AppNotification(title = "Debt Update", message = "Arpon marked ৳1500 as Paid.", timestamp = currentTime - (oneDay * 2), isRead = true),
-            AppNotification(title = "Reminder", message = "Don't forget to log your daily expenses!", timestamp = currentTime - (oneDay * 4), isRead = true),
-            AppNotification(title = "Weekly Report", message = "Your weekly expense report is ready to download.", timestamp = currentTime - (oneDay * 6), isRead = true)
-        )
-    }
+    // HIGHLIGHT: ডামি ডাটা রিমুভ করে লিস্টটা সম্পূর্ণ খালি (Empty) করে দেওয়া হয়েছে।
+    // ভবিষ্যতে ডাটাবেস থেকে রিয়েল নোটিফিকেশন এখানে লোড করতে পারবেন।
+    val notifications = remember { emptyList<AppNotification>() }
 
     Column(
         modifier = Modifier
@@ -81,33 +71,52 @@ fun NotificationScreen(navController: NavController) {
             Text("Notifications", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = textColor)
         }
 
-        // --- NOTIFICATION LIST ---
-        LazyColumn(
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            // Grouping logic based on time
-            val today = notifications.filter { isToday(it.timestamp) }
-            val yesterday = notifications.filter { isYesterday(it.timestamp) }
-            val older = notifications.filter { !isToday(it.timestamp) && !isYesterday(it.timestamp) }
-
-            if (today.isNotEmpty()) {
-                item { SectionHeader("Today", textColor) }
-                items(today) { notif -> NotificationCard(notif, cardColor, textColor) }
+        // --- NOTIFICATION LIST or EMPTY STATE ---
+        if (notifications.isEmpty()) {
+            // HIGHLIGHT: কোনো নোটিফিকেশন না থাকলে এই Empty State দেখাবে
+            Column(
+                modifier = Modifier.fillMaxSize().padding(bottom = 50.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    imageVector = Icons.Default.NotificationsOff,
+                    contentDescription = "No Notifications",
+                    tint = Color.Gray.copy(alpha = 0.5f),
+                    modifier = Modifier.size(80.dp)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("No Notifications Yet", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Text("You're all caught up!", fontSize = 14.sp, color = Color.Gray.copy(alpha = 0.8f))
             }
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // Grouping logic based on time
+                val today = notifications.filter { isToday(it.timestamp) }
+                val yesterday = notifications.filter { isYesterday(it.timestamp) }
+                val older = notifications.filter { !isToday(it.timestamp) && !isYesterday(it.timestamp) }
 
-            if (yesterday.isNotEmpty()) {
-                item { SectionHeader("Yesterday", textColor) }
-                items(yesterday) { notif -> NotificationCard(notif, cardColor, textColor) }
+                if (today.isNotEmpty()) {
+                    item { SectionHeader("Today", textColor) }
+                    items(today) { notif -> NotificationCard(notif, cardColor, textColor) }
+                }
+
+                if (yesterday.isNotEmpty()) {
+                    item { SectionHeader("Yesterday", textColor) }
+                    items(yesterday) { notif -> NotificationCard(notif, cardColor, textColor) }
+                }
+
+                if (older.isNotEmpty()) {
+                    item { SectionHeader("Last 7 Days", textColor) }
+                    items(older) { notif -> NotificationCard(notif, cardColor, textColor) }
+                }
+
+                item { Spacer(modifier = Modifier.height(50.dp)) } // Bottom Padding
             }
-
-            if (older.isNotEmpty()) {
-                item { SectionHeader("Last 7 Days", textColor) }
-                items(older) { notif -> NotificationCard(notif, cardColor, textColor) }
-            }
-
-            item { Spacer(modifier = Modifier.height(50.dp)) } // Bottom Padding
         }
     }
 }

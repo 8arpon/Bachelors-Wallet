@@ -1,14 +1,16 @@
 package com.example.myapplication
 
+import androidx.annotation.Keep
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
-import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import android.content.ContentValues
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -34,10 +36,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
+@Keep
 data class DailyExpense(
     val id: String = UUID.randomUUID().toString(),
     val date: Date,
@@ -80,20 +84,6 @@ fun ExpenseHistoryScreen() {
     val cardColor = if (ThemeState.isDark.value) Color(0xFF1E1E1E) else Color.White
     val textColor = if (ThemeState.isDark.value) Color.White else Color.Black
 
-    // File Picker Launcher for saving PDF in any folder chosen by the user
-    val createDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/pdf")
-    ) { uri: Uri? ->
-        if (uri != null) {
-            val success = PDFManager.writePDFToUri(context, uri, expenses, selectedDate)
-            if (success) {
-                Toast.makeText(context, "PDF Saved Successfully!", Toast.LENGTH_LONG).show()
-            } else {
-                Toast.makeText(context, "Failed to save PDF", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
     Column(modifier = Modifier.fillMaxSize().background(bgColor)) {
         Surface(
             color = cardColor,
@@ -105,18 +95,28 @@ fun ExpenseHistoryScreen() {
                     Text("History", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = textColor)
                     Spacer(modifier = Modifier.weight(1f))
 
-                    // HIGHLIGHT: Replaced ambiguous Icon Box with a clear "Download PDF" Button
+                    // HIGHLIGHT: MediaStore API দিয়ে সরাসরি Downloads ফোল্ডারে সেভ করার কোড
                     Surface(
                         onClick = {
-                            val fileName = "MyWallet_Report_${SimpleDateFormat("MMM_yyyy", Locale.getDefault()).format(selectedDate)}.pdf"
-                            createDocumentLauncher.launch(fileName)
+                            try {
+                                val fileName = "MyWallet_Report_${SimpleDateFormat("MMM_yyyy", Locale.getDefault()).format(selectedDate)}.pdf"
+                                val success = PDFManager.writePDFToDownloads(context, expenses, selectedDate, fileName)
+
+                                if (success) {
+                                    Toast.makeText(context, "Saved to Downloads folder!\n$fileName", Toast.LENGTH_LONG).show()
+                                } else {
+                                    Toast.makeText(context, "Failed to save PDF", Toast.LENGTH_SHORT).show()
+                                }
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Error: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                            }
                         },
-                        color = Color(0xFF007AFF).copy(alpha = 0.1f), // Standard secondary tonal background color
+                        color = Color(0xFF007AFF).copy(alpha = 0.1f),
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Text(
                             text = "Download PDF",
-                            color = Color(0xFF007AFF), // The blue accent color
+                            color = Color(0xFF007AFF),
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
@@ -342,8 +342,7 @@ fun CompactMonthPicker(date: Date, onDateSelected: (Date) -> Unit, cardColor: Co
 }
 
 object PDFManager {
-    // New function to safely write PDF using Uri from CreateDocument API
-    fun writePDFToUri(context: Context, uri: Uri, expenses: List<DailyExpense>, selectedDate: Date): Boolean {
+    fun writePDFToDownloads(context: Context, expenses: List<DailyExpense>, selectedDate: Date, fileName: String): Boolean {
         val document = PdfDocument()
         val pageInfo = PdfDocument.PageInfo.Builder(612, 792, 1).create()
         val page = document.startPage(pageInfo)
@@ -380,7 +379,6 @@ object PDFManager {
             val foodRatio = (totalFood / totalExpense).toFloat() * barWidth
             paint.color = android.graphics.Color.parseColor("#FF9800")
             canvas.drawRect(50f, 240f, 50f + foodRatio, 260f, paint)
-
             paint.color = android.graphics.Color.parseColor("#9C27B0")
             canvas.drawRect(50f + foodRatio, 240f, 50f + barWidth, 260f, paint)
         }
@@ -404,40 +402,51 @@ object PDFManager {
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         for (expense in sorted) {
             val fCost = expense.breakfast + expense.lunch + expense.dinner
-
             paint.color = android.graphics.Color.DKGRAY
             canvas.drawText(dateFormat.format(expense.date), 60f, rowY, paint)
-
             paint.color = android.graphics.Color.parseColor("#4CAF50")
             canvas.drawText(if (expense.income > 0) "+${expense.income.toInt()}" else "-", 160f, rowY, paint)
-
             paint.color = android.graphics.Color.parseColor("#FF9800")
             canvas.drawText(if (fCost > 0) "${fCost.toInt()}" else "-", 260f, rowY, paint)
-
             paint.color = android.graphics.Color.parseColor("#9C27B0")
             canvas.drawText(if (expense.others > 0) "${expense.others.toInt()}" else "-", 360f, rowY, paint)
-
             paint.color = android.graphics.Color.BLACK
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             canvas.drawText("${expense.totalExpense.toInt()}", 460f, rowY, paint)
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-
             paint.color = android.graphics.Color.parseColor("#1A000000")
             canvas.drawLine(50f, rowY + 15f, 562f, rowY + 15f, paint)
-
             rowY += 25f
         }
-
         document.finishPage(page)
 
         return try {
-            // Write PDF safely via ContentResolver
-            context.contentResolver.openOutputStream(uri)?.use { stream ->
-                document.writeTo(stream)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val resolver = context.contentResolver
+                val contentValues = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                    put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf")
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                }
+                val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                if (uri != null) {
+                    resolver.openOutputStream(uri)?.use { stream -> document.writeTo(stream) }
+                    document.close()
+                    true
+                } else {
+                    document.close()
+                    false
+                }
+            } else {
+                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                if (!downloadsDir.exists()) downloadsDir.mkdirs()
+                val file = File(downloadsDir, fileName)
+                FileOutputStream(file).use { stream -> document.writeTo(stream) }
+                document.close()
+                true
             }
-            document.close()
-            true
         } catch (e: Exception) {
+            e.printStackTrace()
             document.close()
             false
         }
