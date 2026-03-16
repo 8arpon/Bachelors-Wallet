@@ -11,7 +11,9 @@ object DataManager {
     private const val PREFS_NAME = "wallet_database"
     private const val EXPENSES_KEY = "all_expenses"
     private const val DEBTS_KEY = "all_debts"
+    private const val NOTIFS_KEY = "all_notifications" // HIGHLIGHT: Notification Data Key
 
+    // --- EXPENSES LOGIC ---
     fun getExpenses(context: Context): List<DailyExpense> {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val json = prefs.getString(EXPENSES_KEY, null) ?: return emptyList()
@@ -82,7 +84,7 @@ object DataManager {
         return cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR) && cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
     }
 
-    // --- DEBT MANAGER DATABASE LOGIC ---
+    // --- DEBT MANAGER LOGIC ---
     fun getDebts(context: Context): List<DebtItem> {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val json = prefs.getString(DEBTS_KEY, null) ?: return emptyList()
@@ -111,16 +113,55 @@ object DataManager {
         }
     }
 
-    // HIGHLIGHT: MISSING FUNCTION 1 (For perfectly deleting a debt)
     fun deleteDebt(context: Context, debtId: String) {
         val debts = getDebts(context).toMutableList()
         debts.removeAll { it.id == debtId }
         saveDebts(context, debts)
     }
 
-    // HIGHLIGHT: MISSING FUNCTION 2 (For Danger Zone in Settings)
     fun clearAllData(context: Context) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit().clear().apply()
+    }
+
+    // --- NOTIFICATION MANAGER LOGIC (MISSING FUNCTIONS ADDED) ---
+    fun getNotifications(context: Context): List<AppNotification> {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val json = prefs.getString(NOTIFS_KEY, null) ?: return emptyList()
+        val type = object : TypeToken<List<AppNotification>>() {}.type
+        return Gson().fromJson(json, type)
+    }
+
+    fun saveNotification(context: Context, notification: AppNotification) {
+        val notifs = getNotifications(context).toMutableList()
+        notifs.add(0, notification) // নতুন নোটিফিকেশন উপরে অ্যাড হবে
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(NOTIFS_KEY, Gson().toJson(notifs)).apply()
+    }
+
+    fun markAllNotificationsAsRead(context: Context) {
+        val notifs = getNotifications(context).map { it.copy(isRead = true) }
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(NOTIFS_KEY, Gson().toJson(notifs)).apply()
+    }
+
+    fun deleteNotification(context: Context, notificationId: String) {
+        val notifs = getNotifications(context).toMutableList()
+        notifs.removeAll { it.id == notificationId }
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(NOTIFS_KEY, Gson().toJson(notifs)).apply()
+    }
+
+    // HIGHLIGHT: আপনার স্ক্রিনশটের এরর ফিক্স করা হয়েছে এই ফাংশনটি দিয়ে
+    fun clearAllNotifications(context: Context, keepDebts: Boolean) {
+        val currentNotifs = getNotifications(context)
+        val newNotifs = if (keepDebts) {
+            // HIGHLIGHT: পুরনো ডাটা যেন ডিলিট না হয় তাই title ও চেক করা হচ্ছে
+            currentNotifs.filter { it.type == "DEBT" || it.title.contains("Debt", ignoreCase = true) }
+        } else {
+            emptyList()
+        }
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(NOTIFS_KEY, Gson().toJson(newNotifs)).apply()
     }
 }

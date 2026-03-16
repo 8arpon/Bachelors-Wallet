@@ -2,7 +2,8 @@ package com.example.myapplication
 
 import android.content.Context
 import android.widget.Toast
-import androidx.compose.animation.AnimatedVisibility
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -34,6 +35,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import java.util.*
 
 @Composable
@@ -58,7 +60,6 @@ fun BudgetScreen() {
 
     val foodFocusReq = remember { FocusRequester() }
     val othersFocusReq = remember { FocusRequester() }
-    var focusedField by remember { mutableStateOf<String?>(null) }
 
     // --- 🧠 LOGIC & CALCULATIONS (Monthly Only) ---
     val calendar = Calendar.getInstance()
@@ -68,8 +69,7 @@ fun BudgetScreen() {
         maxOf(1, totalDays - currentDay + 1)
     }
 
-    // 1. Total Income & Balance (Only This Month)
-    val totalIncomeReceived = ExpenseCalculator.getThisMonthIncome(expenses)
+    // HIGHLIGHT: 1. Total Balance (Including Income & Debts for this month)
     val currentBalance = ExpenseCalculator.getThisMonthBalance(expenses, debts)
 
     // 2. Category Spent Calculations (Only This Month)
@@ -81,19 +81,19 @@ fun BudgetScreen() {
     val todayOthersSpent = expenses.filter { isTodayLocal(it.date.time) }.sumOf { it.others }
     val totalTodaySpent = todayFoodSpent + todayOthersSpent
 
-    // 3. Inputs for Plan
-    var foodInput by remember { mutableStateOf(String.format(Locale.US, "%.0f", totalIncomeReceived * 0.80)) }
-    var othersInput by remember { mutableStateOf(String.format(Locale.US, "%.0f", totalIncomeReceived * 0.20)) }
+    // HIGHLIGHT: 3. Inputs for Plan based on TOTAL BALANCE (not just income)
+    var foodInput by remember { mutableStateOf(String.format(Locale.US, "%.0f", currentBalance * 0.80)) }
+    var othersInput by remember { mutableStateOf(String.format(Locale.US, "%.0f", currentBalance * 0.20)) }
 
-    LaunchedEffect(isAutoBudget, totalIncomeReceived) {
+    LaunchedEffect(isAutoBudget, currentBalance) {
         if (isAutoBudget) {
-            foodInput = String.format(Locale.US, "%.0f", totalIncomeReceived * 0.80)
-            othersInput = String.format(Locale.US, "%.0f", totalIncomeReceived * 0.20)
+            foodInput = String.format(Locale.US, "%.0f", currentBalance * 0.80)
+            othersInput = String.format(Locale.US, "%.0f", currentBalance * 0.20)
         }
     }
 
-    val totalFoodLimit = if (isAutoBudget) totalIncomeReceived * 0.80 else foodInput.toDoubleOrNull() ?: 0.0
-    val totalOthersLimit = if (isAutoBudget) totalIncomeReceived * 0.20 else othersInput.toDoubleOrNull() ?: 0.0
+    val totalFoodLimit = if (isAutoBudget) currentBalance * 0.80 else foodInput.toDoubleOrNull() ?: 0.0
+    val totalOthersLimit = if (isAutoBudget) currentBalance * 0.20 else othersInput.toDoubleOrNull() ?: 0.0
 
     val remainingFoodBudget = totalFoodLimit - totalFoodSpent
     val remainingOthersBudget = totalOthersLimit - totalOthersSpent
@@ -225,27 +225,28 @@ fun BudgetScreen() {
                         }
                     }
 
-                    Text("Total Income: ৳${String.format("%.0f", totalIncomeReceived)}", fontSize = 14.sp, color = Color.Gray)
+                    // HIGHLIGHT: Text changed from "Total Income" to "Total Monthly Balance"
+                    Text("Total Monthly Balance: ৳${String.format("%.0f", currentBalance)}", fontSize = 14.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
                     HorizontalDivider()
 
                     BudgetRow(
                         title = "Food (80%)", color = Color.Magenta, spent = totalFoodSpent, limit = totalFoodLimit, remaining = remainingFoodBudget,
-                        input = foodInput, isUnlocked = isUnlocked, focusRequester = foodFocusReq, onFocus = { focusedField = "food" }
+                        input = foodInput, isUnlocked = isUnlocked, focusRequester = foodFocusReq
                     ) { foodInput = it }
 
                     BudgetRow(
                         title = "Others (20%)", color = Color.Blue, spent = totalOthersSpent, limit = totalOthersLimit, remaining = remainingOthersBudget,
-                        input = othersInput, isUnlocked = isUnlocked, focusRequester = othersFocusReq, onFocus = { focusedField = "others" }
+                        input = othersInput, isUnlocked = isUnlocked, focusRequester = othersFocusReq
                     ) { othersInput = it }
 
                     if (isUnlocked || !isAutoBudget) {
                         Row(modifier = Modifier.fillMaxWidth().clickable {
                             isAutoBudget = true
-                            foodInput = String.format(Locale.US, "%.0f", totalIncomeReceived * 0.80)
-                            othersInput = String.format(Locale.US, "%.0f", totalIncomeReceived * 0.20)
+                            foodInput = String.format(Locale.US, "%.0f", currentBalance * 0.80)
+                            othersInput = String.format(Locale.US, "%.0f", currentBalance * 0.20)
                             focusManager.clearFocus()
                         }.padding(top = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("🔄 Force Sync with Income (80/20 Rule)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF007AFF))
+                            Text("🔄 Force Sync with Balance (80/20 Rule)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF007AFF))
                         }
                     }
                 }
@@ -275,81 +276,131 @@ fun BudgetScreen() {
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(150.dp))
-        }
-
-        AnimatedVisibility(
-            visible = focusedField != null,
-            modifier = Modifier.align(Alignment.BottomCenter).imePadding()
-        ) {
-            Surface(color = Color(0xFFE5E5EA), modifier = Modifier.fillMaxWidth().padding(bottom = 65.dp)) {
-                Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Button(onClick = { if(focusedField=="food") foodInput+="+" else othersInput+="+" }, colors = ButtonDefaults.buttonColors(containerColor = Color.White), shape = RoundedCornerShape(8.dp), modifier = Modifier.size(50.dp, 40.dp), contentPadding = PaddingValues(0.dp)) { Text("+", color = Color.Black, fontSize = 20.sp) }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Button(onClick = { if(focusedField=="food") foodInput+="-" else othersInput+="-" }, colors = ButtonDefaults.buttonColors(containerColor = Color.White), shape = RoundedCornerShape(8.dp), modifier = Modifier.size(50.dp, 40.dp), contentPadding = PaddingValues(0.dp)) { Text("-", color = Color.Black, fontSize = 20.sp) }
-
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    Button(
-                        onClick = {
-                            if (focusedField == "food") {
-                                foodInput = evaluateSimpleMath(foodInput)
-                                othersFocusReq.requestFocus()
-                            } else {
-                                othersInput = evaluateSimpleMath(othersInput)
-                                saveAndLock()
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007AFF)), shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text(if (focusedField == "food") "Next" else "Done", fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
+            Spacer(modifier = Modifier.height(100.dp))
         }
     }
 
+    // --- PASSWORD & BIOMETRIC AUTHENTICATION DIALOG ---
     if (showPasswordAlert) {
         val prefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
-        val savedPass = prefs.getString("app_password", "Arpon") ?: "Arpon"
+        val savedPass = prefs.getString("app_password", "") ?: ""
 
-        AlertDialog(
-            onDismissRequest = { showPasswordAlert = false; wrongPassword = false; passwordInput = "" },
-            title = { Text("Security Check") },
-            text = {
-                Column {
-                    Text(if (wrongPassword) "Wrong Password!" else "Enter password to edit.", color = if (wrongPassword) Color.Red else Color.Gray)
-                    Spacer(modifier = Modifier.height(10.dp))
-                    OutlinedTextField(
-                        value = passwordInput,
-                        onValueChange = { passwordInput = it },
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        singleLine = true
-                    )
-                }
-            },
-            confirmButton = {
-                Button(onClick = {
-                    if (passwordInput == savedPass) {
+        fun authenticateAndUnlock() {
+            val activity = context.getActivity() ?: return Toast.makeText(context, "Error: Activity not found", Toast.LENGTH_SHORT).show()
+            val executor = ContextCompat.getMainExecutor(activity)
+            val biometricPrompt = BiometricPrompt(activity, executor,
+                object : BiometricPrompt.AuthenticationCallback() {
+                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                         isUnlocked = true
                         showPasswordAlert = false
                         wrongPassword = false
                         passwordInput = ""
-                    } else {
-                        wrongPassword = true
                     }
-                }) { Text("Unlock") }
+                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                        Toast.makeText(context, "Auth Error: $errString", Toast.LENGTH_SHORT).show()
+                    }
+                })
+
+            val promptInfo = BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Verify Identity")
+                .setSubtitle("Confirm it's you to edit the budget plan")
+                .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+                .build()
+            biometricPrompt.authenticate(promptInfo)
+        }
+
+        AlertDialog(
+            containerColor = if (ThemeState.isDark.value) Color(0xFF1E1E1E) else Color.White,
+            onDismissRequest = { showPasswordAlert = false; wrongPassword = false; passwordInput = "" },
+            title = {
+                Text(
+                    text = if (savedPass.isEmpty()) "Set App Password" else "Security Check",
+                    fontWeight = FontWeight.Bold,
+                    color = if (ThemeState.isDark.value) Color.White else Color.Black
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = if (savedPass.isEmpty()) "No password is set. Set a new password or use fingerprint to unlock."
+                        else if (wrongPassword) "Wrong Password!"
+                        else "Enter password or use fingerprint.",
+                        color = if (wrongPassword) Color.Red else Color.Gray,
+                        fontSize = 14.sp
+                    )
+                    Spacer(modifier = Modifier.height(15.dp))
+
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = passwordInput,
+                            onValueChange = { passwordInput = it },
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f),
+                            label = { Text(if (savedPass.isEmpty()) "New Password" else "Password") },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = if (ThemeState.isDark.value) Color.White else Color.Black,
+                                unfocusedTextColor = if (ThemeState.isDark.value) Color.White else Color.Black
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .padding(top = 6.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFF007AFF).copy(alpha = 0.1f))
+                                .clickable { authenticateAndUnlock() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Lock, contentDescription = "Biometric Unlock", tint = Color(0xFF007AFF))
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (savedPass.isEmpty()) {
+                            if (passwordInput.length >= 4) {
+                                prefs.edit().putString("app_password", passwordInput).apply()
+                                isUnlocked = true
+                                showPasswordAlert = false
+                                passwordInput = ""
+                                Toast.makeText(context, "Password Saved!", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "Password must be at least 4 chars", Toast.LENGTH_SHORT).show()
+                            }
+                        } else {
+                            if (passwordInput == savedPass) {
+                                isUnlocked = true
+                                showPasswordAlert = false
+                                wrongPassword = false
+                                passwordInput = ""
+                            } else {
+                                wrongPassword = true
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007AFF)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(if (savedPass.isEmpty()) "Save & Unlock" else "Unlock", fontWeight = FontWeight.Bold, color = Color.White)
+                }
             },
             dismissButton = {
-                TextButton(onClick = { showPasswordAlert = false; wrongPassword = false; passwordInput = "" }) { Text("Cancel") }
+                TextButton(onClick = { showPasswordAlert = false; wrongPassword = false; passwordInput = "" }) {
+                    Text("Cancel", color = Color.Gray)
+                }
             }
         )
     }
 }
 
 @Composable
-fun BudgetRow(title: String, color: Color, spent: Double, limit: Double, remaining: Double, input: String, isUnlocked: Boolean, focusRequester: FocusRequester, onFocus: () -> Unit, onInputChange: (String) -> Unit) {
+fun BudgetRow(title: String, color: Color, spent: Double, limit: Double, remaining: Double, input: String, isUnlocked: Boolean, focusRequester: FocusRequester, onInputChange: (String) -> Unit) {
     Column(modifier = Modifier.fillMaxWidth().background(if (ThemeState.isDark.value) Color(0xFF2C2C2E) else Color(0xFFF2F2F7), RoundedCornerShape(12.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(title, fontWeight = FontWeight.Bold, color = if (ThemeState.isDark.value) Color.White else Color.Black)
@@ -369,14 +420,14 @@ fun BudgetRow(title: String, color: Color, spent: Double, limit: Double, remaini
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text("Plan:", fontSize = 12.sp, color = Color.Gray)
-                BasicTextFieldCustom(input = input, isUnlocked = isUnlocked, focusRequester = focusRequester, onFocus = onFocus, onInputChange = onInputChange)
+                BasicTextFieldCustom(input = input, isUnlocked = isUnlocked, focusRequester = focusRequester, onInputChange = onInputChange)
             }
         }
     }
 }
 
 @Composable
-fun BasicTextFieldCustom(input: String, isUnlocked: Boolean, focusRequester: FocusRequester, onFocus: () -> Unit, onInputChange: (String) -> Unit) {
+fun BasicTextFieldCustom(input: String, isUnlocked: Boolean, focusRequester: FocusRequester, onInputChange: (String) -> Unit) {
     val borderColor = if (isUnlocked) Color(0xFF34C759) else Color.Transparent
     val bgColor = if (isUnlocked) Color.White else Color.Transparent
     val textColor = if (!isUnlocked && ThemeState.isDark.value) Color.LightGray else if (isUnlocked) Color.Black else Color.Gray
@@ -389,7 +440,7 @@ fun BasicTextFieldCustom(input: String, isUnlocked: Boolean, focusRequester: Foc
             .background(bgColor, RoundedCornerShape(6.dp))
             .border(1.dp, borderColor, RoundedCornerShape(6.dp))
             .focusRequester(focusRequester)
-            .onFocusChanged { if (it.isFocused) onFocus() }
+            // HIGHLIGHT: Removed the onFocusChanged logic that was triggering the floating bar
             .padding(horizontal = 8.dp, vertical = 6.dp),
         enabled = isUnlocked,
         singleLine = true,
@@ -399,6 +450,7 @@ fun BasicTextFieldCustom(input: String, isUnlocked: Boolean, focusRequester: Foc
             fontWeight = FontWeight.Bold,
             color = textColor
         ),
+        // Allows simple math characters from keyboard
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
         cursorBrush = SolidColor(Color(0xFF007AFF))
     )

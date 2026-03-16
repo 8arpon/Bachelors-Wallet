@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.app.DatePickerDialog
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -13,6 +14,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -20,12 +22,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -43,6 +47,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
@@ -121,6 +126,16 @@ fun MainApp() {
         }
     }
 
+    val activity = context as? Activity
+    val intentOpenTab = activity?.intent?.getStringExtra("OPEN_TAB")
+
+    LaunchedEffect(intentOpenTab) {
+        if (intentOpenTab == "NOTIFICATIONS") {
+            navController.navigate("notifications") { launchSingleTop = true }
+            activity.intent?.removeExtra("OPEN_TAB")
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -179,7 +194,7 @@ fun FloatingNavBar(navController: NavController, modifier: Modifier = Modifier) 
             NavItem(icon = Icons.Default.Person, title = "Debt", isSelected = currentRoute == "debt") {
                 if (currentRoute != "debt") navController.navigate("debt") { launchSingleTop = true }
             }
-            NavItem(icon = Icons.Default.List, title = "History", isSelected = currentRoute == "history") {
+            NavItem(icon = Icons.Default.History, title = "History", isSelected = currentRoute == "history") {
                 if (currentRoute != "history") navController.navigate("history") { launchSingleTop = true }
             }
         }
@@ -234,7 +249,6 @@ fun BudgetPlannerScreen(navController: NavController) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val scrollState = rememberScrollState()
-    val coroutineScope = rememberCoroutineScope()
 
     val expenseFocusRequester = remember { FocusRequester() }
     val incomeFocusRequester = remember { FocusRequester() }
@@ -292,22 +306,7 @@ fun BudgetPlannerScreen(navController: NavController) {
     }
 
     LaunchedEffect(incomeDate, expenseDate, selectedCategory, allExpenses) { updateHints() }
-    LaunchedEffect(successMessage) { if (successMessage.isNotEmpty()) {
-        delay(2500); successMessage = "" } }
-
-    fun handleSave(isIncome: Boolean, amount: Double, op: SaveOp) {
-        if (isIncome) {
-            DataManager.addIncome(context, incomeDate, amount, op)
-            successMessage = "Income Saved!"
-            incomeInput = TextFieldValue("")
-        } else {
-            DataManager.addExpense(context, expenseDate, selectedCategory, amount, op)
-            successMessage = "Expense Saved!"
-            expenseInput = TextFieldValue("")
-        }
-        allExpenses = DataManager.getExpenses(context)
-        focusManager.clearFocus()
-    }
+    LaunchedEffect(successMessage) { if (successMessage.isNotEmpty()) { delay(2000); successMessage = "" } }
 
     fun parseTerm(expr: String): Double {
         val multParts = expr.split('*')
@@ -346,9 +345,46 @@ fun BudgetPlannerScreen(navController: NavController) {
         }
     }
 
+    fun handleSave(isIncome: Boolean, amount: Double, op: SaveOp, keepFocus: Boolean = false) {
+        if (isIncome) {
+            DataManager.addIncome(context, incomeDate, amount, op)
+            successMessage = "Income Saved!"
+            incomeInput = TextFieldValue("")
+        } else {
+            DataManager.addExpense(context, expenseDate, selectedCategory, amount, op)
+            successMessage = "${selectedCategory.label} Saved!"
+            expenseInput = TextFieldValue("")
+        }
+        allExpenses = DataManager.getExpenses(context)
+        if (!keepFocus) focusManager.clearFocus()
+    }
+
     val cardColor = if (ThemeState.isDark.value) Color(0xFF1E1E1E) else Color.White
     val textColor = if (ThemeState.isDark.value) Color.White else Color.Black
     val iconBgColor = if (ThemeState.isDark.value) Color(0xFF1E1E1E) else Color.White
+
+    // --- LIVE RED DOT LOGIC ---
+    var hasUnreadNotifs by remember { mutableStateOf(false) }
+    val updateNotifState = { hasUnreadNotifs = DataManager.getNotifications(context).any { !it.isRead } }
+
+    LaunchedEffect(Unit) { updateNotifState() }
+
+    DisposableEffect(context) {
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(c: Context?, i: Intent?) { updateNotifState() }
+        }
+        val filter = android.content.IntentFilter("ACTION_UPDATE_RED_DOT")
+
+        // HIGHLIGHT: Smart way to register receiver without warnings
+        ContextCompat.registerReceiver(
+            context,
+            receiver,
+            filter,
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+
+        onDispose { context.unregisterReceiver(receiver) }
+    }
 
     Column(
         modifier = Modifier
@@ -370,16 +406,37 @@ fun BudgetPlannerScreen(navController: NavController) {
                 Text(SimpleDateFormat("EEEE, d MMM", Locale.getDefault()).format(Date()), color = Color.Gray)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.size(50.dp).clip(CircleShape).background(iconBgColor).clickable {
-                    navController.navigate("notifications")
-                }, contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier.size(50.dp).clip(CircleShape).background(iconBgColor).clickable {
+                        navController.navigate("notifications")
+                    },
+                    contentAlignment = Alignment.Center
+                ) {
                     Text("🔔", fontSize = 24.sp)
+                    if (hasUnreadNotifs) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = 10.dp, end = 12.dp)
+                                .size(12.dp)
+                                .border(2.dp, iconBgColor, CircleShape)
+                                .clip(CircleShape)
+                                .background(Color(0xFFFF3B30))
+                        )
+                    }
                 }
                 Spacer(modifier = Modifier.width(12.dp))
-                Box(modifier = Modifier.size(50.dp).clip(CircleShape).background(iconBgColor).clickable {
-                    navController.navigate("settings")
-                }, contentAlignment = Alignment.Center) {
-                    Text("≡", fontSize = 32.sp, fontWeight = FontWeight.Light, color = textColor)
+                Box(
+                    modifier = Modifier.size(50.dp).clip(CircleShape).background(iconBgColor).clickable {
+                        navController.navigate("settings")
+                    }, contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Settings",
+                        tint = textColor,
+                        modifier = Modifier.size(28.dp)
+                    )
                 }
             }
         }
@@ -402,17 +459,25 @@ fun BudgetPlannerScreen(navController: NavController) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // INCOME CARD
+        // INCOME ENTRY
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = cardColor)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
+                // HIGHLIGHT: Income Entry Header with Animated "Today" Button
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text("Income Entry", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = textColor)
-                    DatePill(dateText = displayFormatter.format(incomeDate)) {
-                        showDatePicker(context) { selected -> incomeDate = selected }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AnimatedVisibility(visible = !isTodayLocal(incomeDate.time), enter = fadeIn() + expandHorizontally(), exit = fadeOut() + shrinkHorizontally()) {
+                            Box(modifier = Modifier.padding(end = 8.dp).clip(CircleShape).background(Color(0xFF34C759).copy(alpha = 0.1f)).clickable { incomeDate = Date() }.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                                Text("Today", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF34C759))
+                            }
+                        }
+                        DatePill(dateText = displayFormatter.format(incomeDate)) {
+                            showDatePicker(context) { selected -> incomeDate = selected }
+                        }
                     }
                 }
 
@@ -430,7 +495,16 @@ fun BudgetPlannerScreen(navController: NavController) {
                             .focusRequester(incomeFocusRequester)
                             .onFocusChanged { focusState -> isIncomeFocused = focusState.isFocused },
                         shape = RoundedCornerShape(12.dp),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+                        keyboardActions = KeyboardActions(
+                            onNext = {
+                                if (incomeInput.text.isNotEmpty()) {
+                                    val amt = evaluateExpression(incomeInput.text)
+                                    if (amt >= 0) handleSave(isIncome = true, amount = amt, op = SaveOp.OVERWRITE, keepFocus = true)
+                                }
+                                expenseFocusRequester.requestFocus()
+                            }
+                        ),
                         colors = OutlinedTextFieldDefaults.colors(focusedTextColor = textColor, unfocusedTextColor = textColor)
                     )
 
@@ -453,7 +527,7 @@ fun BudgetPlannerScreen(navController: NavController) {
                             AnimatedVisibility(visible = incomeInput.text.isNotEmpty()) {
                                 Box(modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF4CAF50)).clickable {
                                     val amt = evaluateExpression(incomeInput.text)
-                                    if (amt >= 0) handleSave(true, amt, SaveOp.OVERWRITE)
+                                    if (amt >= 0) handleSave(true, amt, SaveOp.OVERWRITE, false)
                                 }, contentAlignment = Alignment.Center) {
                                     Text("✓", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                                 }
@@ -466,25 +540,40 @@ fun BudgetPlannerScreen(navController: NavController) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // EXPENSE CARD
+        // EXPENSE ENTRY
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = cardColor)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
+                // HIGHLIGHT: Expense Entry Header with Animated "Today" Button
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text("Expense Entry", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = textColor)
-                    DatePill(dateText = displayFormatter.format(expenseDate)) {
-                        showDatePicker(context) { selected -> expenseDate = selected }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AnimatedVisibility(visible = !isTodayLocal(expenseDate.time), enter = fadeIn() + expandHorizontally(), exit = fadeOut() + shrinkHorizontally()) {
+                            Box(modifier = Modifier.padding(end = 8.dp).clip(CircleShape).background(Color(0xFF34C759).copy(alpha = 0.1f)).clickable { expenseDate = Date() }.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                                Text("Today", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF34C759))
+                            }
+                        }
+                        DatePill(dateText = displayFormatter.format(expenseDate)) {
+                            showDatePicker(context) { selected -> expenseDate = selected }
+                        }
                     }
                 }
 
                 Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                     ExpenseCategory.entries.forEach { category ->
                         CategoryCircle(category = category, isSelected = selectedCategory == category, onClick = {
-                            selectedCategory = category
-                            expenseInput = TextFieldValue("")
+                            if (selectedCategory != category) {
+                                if (expenseInput.text.isNotEmpty()) {
+                                    val amt = evaluateExpression(expenseInput.text)
+                                    if (amt >= 0) handleSave(isIncome = false, amount = amt, op = SaveOp.OVERWRITE, keepFocus = true)
+                                }
+                                selectedCategory = category
+                                expenseInput = TextFieldValue("")
+                                expenseFocusRequester.requestFocus()
+                            }
                         })
                     }
                 }
@@ -503,7 +592,19 @@ fun BudgetPlannerScreen(navController: NavController) {
                             .focusRequester(expenseFocusRequester)
                             .onFocusChanged { focusState -> isExpenseFocused = focusState.isFocused },
                         shape = RoundedCornerShape(12.dp),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+                        keyboardActions = KeyboardActions(
+                            onNext = {
+                                if (expenseInput.text.isNotEmpty()) {
+                                    val amt = evaluateExpression(expenseInput.text)
+                                    if (amt >= 0) handleSave(isIncome = false, amount = amt, op = SaveOp.OVERWRITE, keepFocus = true)
+                                }
+                                val categories = ExpenseCategory.entries
+                                val nextIndex = (categories.indexOf(selectedCategory) + 1) % categories.size
+                                selectedCategory = categories[nextIndex]
+                                expenseFocusRequester.requestFocus()
+                            }
+                        ),
                         colors = OutlinedTextFieldDefaults.colors(focusedTextColor = textColor, unfocusedTextColor = textColor)
                     )
 
@@ -526,7 +627,7 @@ fun BudgetPlannerScreen(navController: NavController) {
                             AnimatedVisibility(visible = expenseInput.text.isNotEmpty()) {
                                 Box(modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF4CAF50)).clickable {
                                     val amt = evaluateExpression(expenseInput.text)
-                                    if (amt >= 0) handleSave(false, amt, SaveOp.OVERWRITE)
+                                    if (amt >= 0) handleSave(false, amt, SaveOp.OVERWRITE, false)
                                 }, contentAlignment = Alignment.Center) {
                                     Text("✓", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                                 }
@@ -540,7 +641,7 @@ fun BudgetPlannerScreen(navController: NavController) {
         AnimatedVisibility(visible = successMessage.isNotEmpty()) {
             Box(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), contentAlignment = Alignment.Center) {
                 Surface(color = Color(0xFFE8F5E9), shape = RoundedCornerShape(8.dp)) {
-                    Text(successMessage, color = Color(0xFF2E7D32), modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                    Text(successMessage, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 }
             }
         }
@@ -549,7 +650,6 @@ fun BudgetPlannerScreen(navController: NavController) {
 
 @Composable
 fun DatePill(dateText: String, onClick: () -> Unit) {
-    // HIGHLIGHT: ডার্ক এবং লাইট মোডের জন্য আলাদা অ্যাসথেটিক কালার
     val bgColor = if (ThemeState.isDark.value) Color(0xFF007AFF).copy(alpha = 0.15f) else Color(0xFFE3F2FD)
     val textColor = if (ThemeState.isDark.value) Color(0xFF64B5F6) else Color(0xFF1976D2)
 
@@ -564,7 +664,6 @@ fun DatePill(dateText: String, onClick: () -> Unit) {
 fun showDatePicker(context: Context, onDateSelected: (Date) -> Unit) {
     val calendar = Calendar.getInstance()
 
-    // HIGHLIGHT: নেটিভ পপ-আপ ক্যালেন্ডারকেও ডার্ক/লাইট মোডের সাথে সিঙ্ক করা হয়েছে
     val themeRes = if (ThemeState.isDark.value) android.R.style.Theme_DeviceDefault_Dialog else android.R.style.Theme_DeviceDefault_Light_Dialog
 
     DatePickerDialog(
@@ -582,7 +681,6 @@ fun showDatePicker(context: Context, onDateSelected: (Date) -> Unit) {
 
 @Composable
 fun CategoryCircle(category: ExpenseCategory, isSelected: Boolean, onClick: () -> Unit) {
-    // HIGHLIGHT: Ekhon dark mode e unselected icon er background aesthetic dark-gray thakbe!
     val unselectedBg = if (ThemeState.isDark.value) Color(0xFF2C2C2E) else Color(0xFFF1F3F5)
     val bgColor by animateColorAsState(if (isSelected) category.color else unselectedBg, label = "")
 
