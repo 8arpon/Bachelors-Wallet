@@ -136,6 +136,8 @@ fun ProfileScreen(navController: NavController) {
     var deletePasswordInput by remember { mutableStateOf("") }
     var deleteWrongPassword by remember { mutableStateOf(false) }
 
+    var showLogoutDialog by remember { mutableStateOf(false) }
+
     // THEME COLORS
     val isDark = ThemeState.isDark.value
     val bgColor = if (isDark) Color(0xFF121212) else Color(0xFFF2F2F7)
@@ -294,8 +296,10 @@ fun ProfileScreen(navController: NavController) {
                                     email = ""
                                     Toast.makeText(context, "Logged Out Successfully", Toast.LENGTH_SHORT).show()
                                 }) {
-                                    Icon(Icons.Outlined.Logout, contentDescription = "Logout", tint = dangerColor)
-                                }
+                                    // HIGHLIGHT: ডায়ালগ ওপেন করবে
+                                    IconButton(onClick = { showLogoutDialog = true }) {
+                                        Icon(Icons.Outlined.Logout, contentDescription = "Logout", tint = dangerColor)
+                                    }                                }
                             }
                         }
                         AnimatedVisibility(visible = isEditing) {
@@ -627,6 +631,42 @@ fun ProfileScreen(navController: NavController) {
             dismissButton = { TextButton(onClick = { showDangerDialog = false; deleteWrongPassword = false; deletePasswordInput = "" }) { Text("Cancel", color = textColor) } }
         )
     }
+
+
+    // --- LOGOUT WARNING DIALOG ---
+    if (showLogoutDialog) {
+        AlertDialog(
+            containerColor = cardColor,
+            onDismissRequest = { showLogoutDialog = false },
+            title = { Text("Log Out?", color = dangerColor, fontWeight = FontWeight.Bold) },
+            text = {
+                Text("Logging out will clear all local data from this device for your security.\n\nPlease make sure you have tapped 'Backup Now' to save your data to the cloud before leaving.", color = textColor, fontSize = 14.sp)
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        // ১. সব লোকাল ডাটা মুছে দেওয়া হলো!
+                        DataManager.clearAllData(context)
+                        // ২. ফায়ারবেস থেকে সাইন আউট
+                        CloudSyncManager.auth.signOut()
+
+                        isLoggedIn = false
+                        displayName = ""
+                        photoUrl = ""
+                        email = ""
+                        showLogoutDialog = false
+                        Toast.makeText(context, "Logged Out & Device Data Cleared!", Toast.LENGTH_LONG).show()
+                        navController.navigate("auth") { popUpTo(0) }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = dangerColor)
+                ) { Text("Log Out & Clear", color = Color.White, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) { Text("Cancel", color = textColor) }
+            }
+        )
+    }
+
 
     // --- APP INFO AESTHETIC DIALOG ---
     if (showAppInfoDialog) {
