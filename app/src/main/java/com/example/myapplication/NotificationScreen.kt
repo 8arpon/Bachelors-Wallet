@@ -1,6 +1,7 @@
 package com.example.myapplication
 
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.widget.Toast
 import androidx.compose.animation.*
@@ -65,11 +66,16 @@ fun NotificationScreen(navController: NavController) {
 
     var selectedNotif by remember { mutableStateOf<AppNotification?>(null) }
 
+    // HIGHLIGHT: Mark all as read and remove Red Dot
     LaunchedEffect(Unit) {
         if (notifications.any { !it.isRead }) {
-            kotlinx.coroutines.delay(1500)
+            kotlinx.coroutines.delay(500) // একটু কম ডিলে, যাতে ফাস্ট কাজ করে
             DataManager.markAllNotificationsAsRead(context)
             notifications = DataManager.getNotifications(context)
+
+            // HIGHLIGHT: হোম স্ক্রিনের লাল ডট গায়েব করার ব্রডকাস্ট!
+            val intent = Intent("ACTION_UPDATE_RED_DOT")
+            context.sendBroadcast(intent)
         }
     }
 
@@ -468,6 +474,7 @@ fun isToday(timestamp: Long): Boolean {
     val cal2 = Calendar.getInstance().apply { timeInMillis = timestamp }
     return cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR) && cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
 }
+
 
 fun isYesterday(timestamp: Long): Boolean {
     val cal1 = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }

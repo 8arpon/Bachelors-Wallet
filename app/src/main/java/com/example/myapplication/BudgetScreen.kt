@@ -69,40 +69,48 @@ fun BudgetScreen() {
         maxOf(1, totalDays - currentDay + 1)
     }
 
-    // HIGHLIGHT: 1. Total Balance (Including Income & Debts for this month)
-    val currentBalance = ExpenseCalculator.getThisMonthBalance(expenses, debts)
+    // 1. Current Remaining Wallet Balance
+    val currentBalance = ExpenseCalculator.getThisMonthBalance(context, expenses, debts)
 
     // 2. Category Spent Calculations (Only This Month)
     val thisMonthExpenses = expenses.filter { ExpenseCalculator.isThisMonth(it.date) }
     val totalFoodSpent = thisMonthExpenses.sumOf { it.breakfast + it.lunch + it.dinner }
     val totalOthersSpent = thisMonthExpenses.sumOf { it.others }
+    val totalSpentThisMonth = totalFoodSpent + totalOthersSpent
+
+    // HIGHLIGHT: PERFECT BUDGET MATH
+    // Total Budget Base = What you have now + What you already spent.
+    // This gives us the true 100% starting money for the month, which stays CONSTANT!
+    val totalMonthlyBudgetBase = currentBalance + totalSpentThisMonth
 
     val todayFoodSpent = expenses.filter { isTodayLocal(it.date.time) }.sumOf { it.breakfast + it.lunch + it.dinner }
     val todayOthersSpent = expenses.filter { isTodayLocal(it.date.time) }.sumOf { it.others }
     val totalTodaySpent = todayFoodSpent + todayOthersSpent
 
-    // HIGHLIGHT: 3. Inputs for Plan based on TOTAL BALANCE (not just income)
-    var foodInput by remember { mutableStateOf(String.format(Locale.US, "%.0f", currentBalance * 0.80)) }
-    var othersInput by remember { mutableStateOf(String.format(Locale.US, "%.0f", currentBalance * 0.20)) }
+    // 3. Inputs for Plan based on TOTAL BUDGET BASE (Not shrinking balance)
+    var foodInput by remember { mutableStateOf(String.format(Locale.US, "%.0f", totalMonthlyBudgetBase * 0.80)) }
+    var othersInput by remember { mutableStateOf(String.format(Locale.US, "%.0f", totalMonthlyBudgetBase * 0.20)) }
 
-    LaunchedEffect(isAutoBudget, currentBalance) {
+    LaunchedEffect(isAutoBudget, totalMonthlyBudgetBase) {
         if (isAutoBudget) {
-            foodInput = String.format(Locale.US, "%.0f", currentBalance * 0.80)
-            othersInput = String.format(Locale.US, "%.0f", currentBalance * 0.20)
+            foodInput = String.format(Locale.US, "%.0f", totalMonthlyBudgetBase * 0.80)
+            othersInput = String.format(Locale.US, "%.0f", totalMonthlyBudgetBase * 0.20)
         }
     }
 
-    val totalFoodLimit = if (isAutoBudget) currentBalance * 0.80 else foodInput.toDoubleOrNull() ?: 0.0
-    val totalOthersLimit = if (isAutoBudget) currentBalance * 0.20 else othersInput.toDoubleOrNull() ?: 0.0
+    val totalFoodLimit = if (isAutoBudget) totalMonthlyBudgetBase * 0.80 else foodInput.toDoubleOrNull() ?: 0.0
+    val totalOthersLimit = if (isAutoBudget) totalMonthlyBudgetBase * 0.20 else othersInput.toDoubleOrNull() ?: 0.0
 
     val remainingFoodBudget = totalFoodLimit - totalFoodSpent
     val remainingOthersBudget = totalOthersLimit - totalOthersSpent
 
+    // HIGHLIGHT: Daily Targets strictly use the REMAINING WALLET BALANCE
+    val safeDailySpend = (currentBalance + totalTodaySpent) / daysRemaining
+    val nextDayBudget = if (daysRemaining > 1) currentBalance / (daysRemaining - 1) else 0.0
+
+    // Sub-daily breakdown based on remaining category limits
     val safeDailyFood = (remainingFoodBudget + todayFoodSpent) / daysRemaining
     val safeDailyOthers = (remainingOthersBudget + todayOthersSpent) / daysRemaining
-    val safeDailySpend = safeDailyFood + safeDailyOthers
-
-    val nextDayBudget = if (daysRemaining > 1) (remainingFoodBudget + remainingOthersBudget) / (daysRemaining - 1) else 0.0
 
     fun evaluateSimpleMath(expr: String): String {
         return try {
@@ -226,7 +234,7 @@ fun BudgetScreen() {
                     }
 
                     // HIGHLIGHT: Text changed from "Total Income" to "Total Monthly Balance"
-                    Text("Total Monthly Balance: ৳${String.format("%.0f", currentBalance)}", fontSize = 14.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
+                    Text("Total Monthly Budget Base: ৳${String.format("%.0f", totalMonthlyBudgetBase)}", fontSize = 14.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
                     HorizontalDivider()
 
                     BudgetRow(
@@ -242,11 +250,11 @@ fun BudgetScreen() {
                     if (isUnlocked || !isAutoBudget) {
                         Row(modifier = Modifier.fillMaxWidth().clickable {
                             isAutoBudget = true
-                            foodInput = String.format(Locale.US, "%.0f", currentBalance * 0.80)
-                            othersInput = String.format(Locale.US, "%.0f", currentBalance * 0.20)
+                            foodInput = String.format(Locale.US, "%.0f", totalMonthlyBudgetBase * 0.80)
+                            othersInput = String.format(Locale.US, "%.0f", totalMonthlyBudgetBase * 0.20)
                             focusManager.clearFocus()
                         }.padding(top = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("🔄 Force Sync with Balance (80/20 Rule)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF007AFF))
+                            Text("🔄 Sync with Total Income (80/20 Rule)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF007AFF))
                         }
                     }
                 }

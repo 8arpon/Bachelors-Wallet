@@ -28,8 +28,17 @@ object ExpenseCalculator {
     }
 
     // HIGHLIGHT: ডাইনামিক মান্থলি ব্যালেন্স (গত মাসের ধার এই মাসে শোধ হলেই কেবল কাউন্ট হবে)
-    fun getThisMonthBalance(expenses: List<DailyExpense>, debts: List<DebtItem>): Double {
+    fun getThisMonthBalance(context: android.content.Context, expenses: List<DailyExpense>, debts: List<DebtItem>): Double {
         val baseBalance = getThisMonthIncome(expenses) - getThisMonthExpense(expenses)
+
+        // Read user preference
+        val prefs = context.getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
+        val includeDebt = prefs.getBoolean("pref_include_debt_in_balance", true)
+
+        // If the user disabled integration, just return the base balance
+        if (!includeDebt) {
+            return baseBalance
+        }
 
         var debtImpact = 0.0
         for (debt in debts) {

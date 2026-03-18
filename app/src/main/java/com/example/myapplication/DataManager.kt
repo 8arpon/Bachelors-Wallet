@@ -25,6 +25,11 @@ object DataManager {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val json = Gson().toJson(expenses)
         prefs.edit().putString(EXPENSES_KEY, json).apply()
+
+        // HIGHLIGHT: Data entry howar sathe sathe auto backup hobe
+        if (CloudSyncManager.isUserLoggedIn()) {
+            CloudSyncManager.backupToCloud(context) { _, _ -> }
+        }
     }
 
     fun addIncome(context: Context, date: Date, amount: Double, op: SaveOp = SaveOp.OVERWRITE) {
@@ -96,6 +101,11 @@ object DataManager {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val json = Gson().toJson(debts)
         prefs.edit().putString(DEBTS_KEY, json).apply()
+
+        // HIGHLIGHT: Data entry howar sathe sathe auto backup hobe
+        if (CloudSyncManager.isUserLoggedIn()) {
+            CloudSyncManager.backupToCloud(context) { _, _ -> }
+        }
     }
 
     fun addDebt(context: Context, debt: DebtItem) {

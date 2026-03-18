@@ -26,10 +26,11 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -148,20 +149,23 @@ fun MainApp() {
             enterTransition = { fadeIn(animationSpec = tween(300)) },
             exitTransition = { fadeOut(animationSpec = tween(300)) }
         ) {
+            composable("auth") {
+                AuthScreen(onAuthSuccess = {
+                    navController.navigate("home") { popUpTo("home") { inclusive = true } }
+                })
+            }
             composable("home") { BudgetPlannerScreen(navController) }
             composable("budget") { BudgetScreen() }
             composable("debt") { DebtManagerScreen() }
             composable("history") { ExpenseHistoryScreen() }
-            composable("settings") { SettingsScreen(navController) }
             composable("notifications") { NotificationScreen(navController) }
+            composable("profile") { ProfileScreen(navController) }
         }
 
+        // HIGHLIGHT: নিচে কোনো প্যাডিং রাখা হয়নি, একদম স্ক্রিনের শেষ মাথায় বসবে!
         FloatingNavBar(
             navController = navController,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(bottom = 16.dp)
+            modifier = Modifier.align(Alignment.BottomCenter)
         )
     }
 }
@@ -171,31 +175,42 @@ fun FloatingNavBar(navController: NavController, modifier: Modifier = Modifier) 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    val navBarColor = if (ThemeState.isDark.value) Color(0xFF1E1E1E) else Color.White
+    val navBarColor = if (ThemeState.isDark.value) Color(0xFF1A1A1C) else Color.White
+    val borderColor = if (ThemeState.isDark.value) Color.White.copy(alpha = 0.05f) else Color.Black.copy(alpha = 0.05f)
 
     Surface(
-        modifier = modifier
-            .fillMaxWidth(0.95f)
-            .shadow(12.dp, CircleShape),
-        shape = CircleShape,
-        color = navBarColor
+        modifier = modifier.fillMaxWidth(),
+        color = navBarColor,
+        shadowElevation = 24.dp // সুন্দর শ্যাডো
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            // HIGHLIGHT: প্যাডিংটা কলামের ভেতরে দেওয়ায় ব্যাকগ্রাউন্ড কালারটা সিস্টেম বারের নিচে চলে যাবে
+            modifier = Modifier.navigationBarsPadding()
         ) {
-            NavItem(icon = Icons.Default.Home, title = "Home", isSelected = currentRoute == "home") {
-                if (currentRoute != "home") navController.navigate("home") { launchSingleTop = true }
-            }
-            NavItem(icon = Icons.Default.ShoppingCart, title = "Budget", isSelected = currentRoute == "budget") {
-                if (currentRoute != "budget") navController.navigate("budget") { launchSingleTop = true }
-            }
-            NavItem(icon = Icons.Default.Person, title = "Debt", isSelected = currentRoute == "debt") {
-                if (currentRoute != "debt") navController.navigate("debt") { launchSingleTop = true }
-            }
-            NavItem(icon = Icons.Default.History, title = "History", isSelected = currentRoute == "history") {
-                if (currentRoute != "history") navController.navigate("history") { launchSingleTop = true }
+            HorizontalDivider(color = borderColor, thickness = 1.dp)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp), // HIGHLIGHT: আগের চেয়ে অনেক ন্যারো (চিকন) করা হয়েছে
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                NavItem(icon = Icons.Default.Home, title = "Home", isSelected = currentRoute == "home") {
+                    if (currentRoute != "home") navController.navigate("home") { launchSingleTop = true }
+                }
+                NavItem(icon = Icons.Default.ShoppingCart, title = "Budget", isSelected = currentRoute == "budget") {
+                    if (currentRoute != "budget") navController.navigate("budget") { launchSingleTop = true }
+                }
+                // HIGHLIGHT: আইকনটা চেঞ্জ করে মানানসই করা হয়েছে
+                NavItem(icon = Icons.Default.AccountBalanceWallet, title = "Debt", isSelected = currentRoute == "debt") {
+                    if (currentRoute != "debt") navController.navigate("debt") { launchSingleTop = true }
+                }
+                NavItem(icon = Icons.Default.History, title = "History", isSelected = currentRoute == "history") {
+                    if (currentRoute != "history") navController.navigate("history") { launchSingleTop = true }
+                }
+                NavItem(icon = Icons.Default.Person, title = "Account", isSelected = currentRoute == "profile") {
+                    if (currentRoute != "profile") navController.navigate("profile") { launchSingleTop = true }
+                }
             }
         }
     }
@@ -204,26 +219,26 @@ fun FloatingNavBar(navController: NavController, modifier: Modifier = Modifier) 
 @Composable
 fun RowScope.NavItem(icon: ImageVector, title: String, isSelected: Boolean, onClick: () -> Unit) {
     val contentColor by animateColorAsState(
-        targetValue = if (isSelected) Color(0xFF0088CC) else Color.Gray,
+        targetValue = if (isSelected) Color(0xFF007AFF) else Color.Gray,
         animationSpec = tween(300), label = ""
     )
 
     val bgColor by animateColorAsState(
-        targetValue = if (isSelected) Color(0xFF0088CC).copy(alpha = 0.1f) else Color.Transparent,
+        targetValue = if (isSelected) Color(0xFF007AFF).copy(alpha = 0.1f) else Color.Transparent,
         animationSpec = tween(300), label = ""
     )
 
     Column(
         modifier = Modifier
             .weight(1f)
-            .clip(CircleShape)
+            .clip(RoundedCornerShape(10.dp))
             .background(bgColor)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick
             )
-            .padding(vertical = 6.dp),
+            .padding(vertical = 6.dp), // HIGHLIGHT: ভেতরের স্পেসও কমানো হয়েছে
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -231,13 +246,13 @@ fun RowScope.NavItem(icon: ImageVector, title: String, isSelected: Boolean, onCl
             imageVector = icon,
             contentDescription = title,
             tint = contentColor,
-            modifier = Modifier.size(22.dp)
+            modifier = Modifier.size(22.dp) // আইকন সামান্য ছোট করা হয়েছে ব্যালেন্সের জন্য
         )
-
+        Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = title,
             color = contentColor,
-            fontWeight = FontWeight.Bold,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
             fontSize = 10.sp
         )
     }
@@ -263,7 +278,7 @@ fun BudgetPlannerScreen(navController: NavController) {
 
     val totalReceived = ExpenseCalculator.getThisMonthIncome(allExpenses)
     val totalSpent = ExpenseCalculator.getThisMonthExpense(allExpenses)
-    val currentBalance = ExpenseCalculator.getThisMonthBalance(allExpenses, allDebts)
+    val currentBalance = ExpenseCalculator.getThisMonthBalance(context, allExpenses, allDebts)
 
     var incomeInput by remember { mutableStateOf(TextFieldValue("")) }
     var expenseInput by remember { mutableStateOf(TextFieldValue("")) }
@@ -361,9 +376,8 @@ fun BudgetPlannerScreen(navController: NavController) {
 
     val cardColor = if (ThemeState.isDark.value) Color(0xFF1E1E1E) else Color.White
     val textColor = if (ThemeState.isDark.value) Color.White else Color.Black
-    val iconBgColor = if (ThemeState.isDark.value) Color(0xFF1E1E1E) else Color.White
+    val iconBgColor = if (ThemeState.isDark.value) Color(0xFF2C2C2E) else Color.White // Slightly darker for dark mode
 
-    // --- LIVE RED DOT LOGIC ---
     var hasUnreadNotifs by remember { mutableStateOf(false) }
     val updateNotifState = { hasUnreadNotifs = DataManager.getNotifications(context).any { !it.isRead } }
 
@@ -374,15 +388,7 @@ fun BudgetPlannerScreen(navController: NavController) {
             override fun onReceive(c: Context?, i: Intent?) { updateNotifState() }
         }
         val filter = android.content.IntentFilter("ACTION_UPDATE_RED_DOT")
-
-        // HIGHLIGHT: Smart way to register receiver without warnings
-        ContextCompat.registerReceiver(
-            context,
-            receiver,
-            filter,
-            ContextCompat.RECEIVER_NOT_EXPORTED
-        )
-
+        ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         onDispose { context.unregisterReceiver(receiver) }
     }
 
@@ -396,6 +402,7 @@ fun BudgetPlannerScreen(navController: NavController) {
             .padding(top = 10.dp)
             .padding(bottom = 90.dp)
     ) {
+        // --- HIGHLIGHT: Clean Header with only Notifications Icon ---
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -405,37 +412,31 @@ fun BudgetPlannerScreen(navController: NavController) {
                 Text("My Wallet", fontSize = 32.sp, fontWeight = FontWeight.Black, color = textColor)
                 Text(SimpleDateFormat("EEEE, d MMM", Locale.getDefault()).format(Date()), color = Color.Gray)
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier.size(50.dp).clip(CircleShape).background(iconBgColor).clickable {
-                        navController.navigate("notifications")
-                    },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("🔔", fontSize = 24.sp)
-                    if (hasUnreadNotifs) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(top = 10.dp, end = 12.dp)
-                                .size(12.dp)
-                                .border(2.dp, iconBgColor, CircleShape)
-                                .clip(CircleShape)
-                                .background(Color(0xFFFF3B30))
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Box(
-                    modifier = Modifier.size(50.dp).clip(CircleShape).background(iconBgColor).clickable {
-                        navController.navigate("settings")
-                    }, contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = "Settings",
-                        tint = textColor,
-                        modifier = Modifier.size(28.dp)
+
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(CircleShape)
+                    .background(iconBgColor)
+                    .clickable { navController.navigate("notifications") },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Notifications,
+                    contentDescription = "Notifications",
+                    tint = if (ThemeState.isDark.value) Color.LightGray else Color(0xFF4A4A4A),
+                    modifier = Modifier.size(26.dp)
+                )
+
+                if (hasUnreadNotifs) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 10.dp, end = 12.dp)
+                            .size(10.dp)
+                            .border(2.dp, iconBgColor, CircleShape)
+                            .clip(CircleShape)
+                            .background(Color(0xFFFF3B30))
                     )
                 }
             }
@@ -466,7 +467,6 @@ fun BudgetPlannerScreen(navController: NavController) {
             colors = CardDefaults.cardColors(containerColor = cardColor)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                // HIGHLIGHT: Income Entry Header with Animated "Today" Button
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text("Income Entry", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = textColor)
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -547,7 +547,6 @@ fun BudgetPlannerScreen(navController: NavController) {
             colors = CardDefaults.cardColors(containerColor = cardColor)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                // HIGHLIGHT: Expense Entry Header with Animated "Today" Button
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text("Expense Entry", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = textColor)
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -663,7 +662,6 @@ fun DatePill(dateText: String, onClick: () -> Unit) {
 
 fun showDatePicker(context: Context, onDateSelected: (Date) -> Unit) {
     val calendar = Calendar.getInstance()
-
     val themeRes = if (ThemeState.isDark.value) android.R.style.Theme_DeviceDefault_Dialog else android.R.style.Theme_DeviceDefault_Light_Dialog
 
     DatePickerDialog(
