@@ -11,6 +11,10 @@ import com.google.firebase.firestore.FirebaseFirestoreSettings
 import com.google.firebase.firestore.Source
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 
 object CloudSyncManager {
@@ -23,7 +27,6 @@ object CloudSyncManager {
             .build()
     }
 
-    // HIGHLIGHT: isRemovingPhoto নামের নতুন প্যারামিটার যুক্ত করা হয়েছে
     fun saveOrUpdateUserProfile(context: Context, name: String?, photoUri: Uri?, isRemovingPhoto: Boolean, onComplete: (Boolean, String) -> Unit) {
         val user = auth.currentUser
         if (user == null) {
@@ -38,9 +41,8 @@ object CloudSyncManager {
             updates["email"] = user.email ?: ""
             updates["displayName"] = if (!name.isNullOrBlank()) name else (user.displayName ?: "User")
 
-            // HIGHLIGHT: ছবি রিমুভ বা সেভ করার আসল লজিক
             if (isRemovingPhoto) {
-                updates["photoUrl"] = "" // ছবি মুছে দেওয়া হলো
+                updates["photoUrl"] = ""
             } else if (photoUri != null && photoUri.toString().startsWith("content://")) {
                 val base64Image = encodeImageToBase64(context, photoUri)
                 if (base64Image != null) updates["photoUrl"] = base64Image
@@ -55,13 +57,11 @@ object CloudSyncManager {
         }
     }
 
-    // Helper: Compress and convert image to Base64 string
     private fun encodeImageToBase64(context: Context, uri: Uri): String? {
         return try {
             val inputStream = context.contentResolver.openInputStream(uri)
             val originalBitmap = BitmapFactory.decodeStream(inputStream)
 
-            // Resize image to 200x200 so it takes very little space in the database
             val scaledBitmap = Bitmap.createScaledBitmap(originalBitmap, 200, 200, true)
             val outputStream = ByteArrayOutputStream()
             scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
@@ -119,13 +119,27 @@ object CloudSyncManager {
                     val debtsJson = document.getString("debts_json") ?: "[]"
                     val expType = object : TypeToken<List<DailyExpense>>() {}.type
                     val debtType = object : TypeToken<List<DebtItem>>() {}.type
+
                     val cloudExpenses: List<DailyExpense> = gson.fromJson(expensesJson, expType) ?: emptyList()
                     val cloudDebts: List<DebtItem> = gson.fromJson(debtsJson, debtType) ?: emptyList()
 
-                    context.getSharedPreferences("wallet_database", Context.MODE_PRIVATE).edit()
-                        .putString("all_expenses", gson.toJson(cloudExpenses)).putString("all_debts", gson.toJson(cloudDebts)).apply()
+                    // HIGHLIGHT: Room Database e notun kore insert kora hocche
+                    CoroutineScope(Dispatchers.IO).launch {
+                        val database = AppDatabase.getDatabase(context)
+                        val expDao = database.expenseDao()
+                        val debtDao = database.debtDao()
 
-                    onComplete(true, "Data Synced Successfully! 🔄")
+                        // Purono data clear kore cloud er data boshabo
+                        expDao.deleteAll()
+                        debtDao.deleteAll()
+
+                        cloudExpenses.forEach { expDao.insertExpense(it) }
+                        cloudDebts.forEach { debtDao.insertDebt(it) }
+
+                        withContext(Dispatchers.Main) {
+                            onComplete(true, "Data Synced Successfully! 🔄")
+                        }
+                    }
                 } catch (e: Exception) { onComplete(false, "Error parsing cloud data.") }
             } else { onComplete(true, "No previous backup found. Clean slate! ✨") }
         }.addOnFailureListener { e -> onComplete(false, "Sync Failed: ${e.localizedMessage}") }

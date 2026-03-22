@@ -1,5 +1,8 @@
 package com.example.myapplication
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
+
 import android.content.Context
 import android.widget.Toast
 import androidx.biometric.BiometricManager
@@ -43,13 +46,8 @@ fun BudgetScreen() {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
 
-    var expenses by remember { mutableStateOf(DataManager.getExpenses(context)) }
-    var debts by remember { mutableStateOf(DataManager.getDebts(context)) }
-
-    LaunchedEffect(Unit) {
-        expenses = DataManager.getExpenses(context)
-        debts = DataManager.getDebts(context)
-    }
+    val expenses by DataManager.getExpensesFlow(context).collectAsState(initial = emptyList())
+    val debts by DataManager.getDebtsFlow(context).collectAsState(initial = emptyList())
 
     var isUnlocked by remember { mutableStateOf(false) }
     var showPasswordAlert by remember { mutableStateOf(false) }

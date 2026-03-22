@@ -1,34 +1,37 @@
 package com.example.myapplication
 
 import android.content.Context
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.launch
 import java.util.*
 
 enum class SaveOp { OVERWRITE, ADD, SUB }
 
 object DataManager {
-    private const val PREFS_NAME = "wallet_database"
-    private const val EXPENSES_KEY = "all_expenses"
-    private const val DEBTS_KEY = "all_debts"
-    private const val NOTIFS_KEY = "all_notifications" // HIGHLIGHT: Notification Data Key
 
     // --- EXPENSES LOGIC ---
     fun getExpenses(context: Context): List<DailyExpense> {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val json = prefs.getString(EXPENSES_KEY, null) ?: return emptyList()
-        val type = object : TypeToken<List<DailyExpense>>() {}.type
-        return Gson().fromJson(json, type)
+        // Since getExpenses is often called synchronously, we might need to block or
+        // ideally refactor. But for now, to keep your UI working without major changes:
+        var expenses: List<DailyExpense> = emptyList()
+        val dao = AppDatabase.getDatabase(context).expenseDao()
+        // Note: In a real app, you shouldn't run DB queries on the main thread like this.
+        // This is a quick fix to map your existing synchronous calls.
+        Thread { expenses = dao.getAllExpensesSync() }.apply { start(); join() }
+        return expenses
     }
 
-    private fun saveExpenses(context: Context, expenses: List<DailyExpense>) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val json = Gson().toJson(expenses)
-        prefs.edit().putString(EXPENSES_KEY, json).apply()
+    private fun saveExpenseToDb(context: Context, expense: DailyExpense) {
+        CoroutineScope(Dispatchers.IO).launch {
+            AppDatabase.getDatabase(context).expenseDao().insertExpense(expense)
 
-        // HIGHLIGHT: Data entry howar sathe sathe auto backup hobe
-        if (CloudSyncManager.isUserLoggedIn()) {
-            CloudSyncManager.backupToCloud(context) { _, _ -> }
+            // HIGHLIGHT: Data entry howar sathe sathe auto backup hobe
+            if (CloudSyncManager.isUserLoggedIn()) {
+                CloudSyncManager.backupToCloud(context) { _, _ -> }
+            }
         }
     }
 
@@ -36,19 +39,19 @@ object DataManager {
         val expenses = getExpenses(context).toMutableList()
         val index = expenses.indexOfFirst { isSameDay(it.date, date) }
 
-        if (index != -1) {
+        val newExpense = if (index != -1) {
             val old = expenses[index]
             val newAmount = when (op) {
                 SaveOp.OVERWRITE -> amount
                 SaveOp.ADD -> old.income + amount
                 SaveOp.SUB -> maxOf(0.0, old.income - amount)
             }
-            expenses[index] = old.copy(income = newAmount)
+            old.copy(income = newAmount)
         } else {
             val newAmount = if (op == SaveOp.SUB) 0.0 else amount
-            expenses.add(DailyExpense(date = date, income = newAmount, breakfast = 0.0, lunch = 0.0, dinner = 0.0, others = 0.0))
+            DailyExpense(date = date, income = newAmount, breakfast = 0.0, lunch = 0.0, dinner = 0.0, others = 0.0)
         }
-        saveExpenses(context, expenses)
+        saveExpenseToDb(context, newExpense)
     }
 
     fun addExpense(context: Context, date: Date, category: ExpenseCategory, amount: Double, op: SaveOp = SaveOp.OVERWRITE) {
@@ -61,7 +64,6 @@ object DataManager {
         if (index != -1) {
             val old = expenses[index]
             b = old.breakfast; l = old.lunch; d = old.dinner; o = old.others; i = old.income; id = old.id
-            expenses.removeAt(index)
         }
 
         fun updateVal(oldVal: Double, amt: Double): Double {
@@ -79,8 +81,8 @@ object DataManager {
             ExpenseCategory.OTHERS -> o = updateVal(o, amount)
         }
 
-        expenses.add(DailyExpense(id = id, date = date, income = i, breakfast = b, lunch = l, dinner = d, others = o))
-        saveExpenses(context, expenses)
+        val newExpense = DailyExpense(id = id, date = date, income = i, breakfast = b, lunch = l, dinner = d, others = o)
+        saveExpenseToDb(context, newExpense)
     }
 
     private fun isSameDay(date1: Date, date2: Date): Boolean {
@@ -91,87 +93,87 @@ object DataManager {
 
     // --- DEBT MANAGER LOGIC ---
     fun getDebts(context: Context): List<DebtItem> {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val json = prefs.getString(DEBTS_KEY, null) ?: return emptyList()
-        val type = object : TypeToken<List<DebtItem>>() {}.type
-        return Gson().fromJson(json, type)
-    }
-
-    private fun saveDebts(context: Context, debts: List<DebtItem>) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val json = Gson().toJson(debts)
-        prefs.edit().putString(DEBTS_KEY, json).apply()
-
-        // HIGHLIGHT: Data entry howar sathe sathe auto backup hobe
-        if (CloudSyncManager.isUserLoggedIn()) {
-            CloudSyncManager.backupToCloud(context) { _, _ -> }
-        }
+        var debts: List<DebtItem> = emptyList()
+        val dao = AppDatabase.getDatabase(context).debtDao()
+        Thread { debts = dao.getAllDebtsSync() }.apply { start(); join() }
+        return debts
     }
 
     fun addDebt(context: Context, debt: DebtItem) {
-        val debts = getDebts(context).toMutableList()
-        debts.add(debt)
-        saveDebts(context, debts)
+        CoroutineScope(Dispatchers.IO).launch {
+            AppDatabase.getDatabase(context).debtDao().insertDebt(debt)
+            if (CloudSyncManager.isUserLoggedIn()) CloudSyncManager.backupToCloud(context) { _, _ -> }
+        }
     }
 
     fun updateDebt(context: Context, updatedDebt: DebtItem) {
-        val debts = getDebts(context).toMutableList()
-        val index = debts.indexOfFirst { it.id == updatedDebt.id }
-        if (index != -1) {
-            debts[index] = updatedDebt
-            saveDebts(context, debts)
+        CoroutineScope(Dispatchers.IO).launch {
+            AppDatabase.getDatabase(context).debtDao().updateDebt(updatedDebt)
         }
     }
 
     fun deleteDebt(context: Context, debtId: String) {
-        val debts = getDebts(context).toMutableList()
-        debts.removeAll { it.id == debtId }
-        saveDebts(context, debts)
+        CoroutineScope(Dispatchers.IO).launch {
+            AppDatabase.getDatabase(context).debtDao().deleteDebtById(debtId)
+        }
     }
 
     fun clearAllData(context: Context) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().clear().apply()
+        CoroutineScope(Dispatchers.IO).launch {
+            val db = AppDatabase.getDatabase(context)
+            db.expenseDao().deleteAll()
+            db.debtDao().deleteAll()
+            db.notificationDao().clearAll()
+        }
     }
 
-    // --- NOTIFICATION MANAGER LOGIC (MISSING FUNCTIONS ADDED) ---
+    // --- NOTIFICATION MANAGER LOGIC ---
     fun getNotifications(context: Context): List<AppNotification> {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val json = prefs.getString(NOTIFS_KEY, null) ?: return emptyList()
-        val type = object : TypeToken<List<AppNotification>>() {}.type
-        return Gson().fromJson(json, type)
+        var notifs: List<AppNotification> = emptyList()
+        val dao = AppDatabase.getDatabase(context).notificationDao()
+        Thread { notifs = dao.getAllNotificationsSync() }.apply { start(); join() }
+        return notifs
     }
 
     fun saveNotification(context: Context, notification: AppNotification) {
-        val notifs = getNotifications(context).toMutableList()
-        notifs.add(0, notification) // নতুন নোটিফিকেশন উপরে অ্যাড হবে
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putString(NOTIFS_KEY, Gson().toJson(notifs)).apply()
+        CoroutineScope(Dispatchers.IO).launch {
+            AppDatabase.getDatabase(context).notificationDao().insertNotification(notification)
+        }
     }
 
     fun markAllNotificationsAsRead(context: Context) {
-        val notifs = getNotifications(context).map { it.copy(isRead = true) }
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putString(NOTIFS_KEY, Gson().toJson(notifs)).apply()
+        CoroutineScope(Dispatchers.IO).launch {
+            AppDatabase.getDatabase(context).notificationDao().markAllAsRead()
+        }
     }
 
     fun deleteNotification(context: Context, notificationId: String) {
-        val notifs = getNotifications(context).toMutableList()
-        notifs.removeAll { it.id == notificationId }
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putString(NOTIFS_KEY, Gson().toJson(notifs)).apply()
+        CoroutineScope(Dispatchers.IO).launch {
+            AppDatabase.getDatabase(context).notificationDao().deleteNotificationById(notificationId)
+        }
     }
 
-    // HIGHLIGHT: আপনার স্ক্রিনশটের এরর ফিক্স করা হয়েছে এই ফাংশনটি দিয়ে
     fun clearAllNotifications(context: Context, keepDebts: Boolean) {
-        val currentNotifs = getNotifications(context)
-        val newNotifs = if (keepDebts) {
-            // HIGHLIGHT: পুরনো ডাটা যেন ডিলিট না হয় তাই title ও চেক করা হচ্ছে
-            currentNotifs.filter { it.type == "DEBT" || it.title.contains("Debt", ignoreCase = true) }
-        } else {
-            emptyList()
+        CoroutineScope(Dispatchers.IO).launch {
+            val dao = AppDatabase.getDatabase(context).notificationDao()
+            if (keepDebts) {
+                dao.clearAllExceptDebts()
+            } else {
+                dao.clearAll()
+            }
         }
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putString(NOTIFS_KEY, Gson().toJson(newNotifs)).apply()
+    }
+
+    // --- FLOWS FOR UI (REAL-TIME UPDATES) ---
+    fun getExpensesFlow(context: Context): Flow<List<DailyExpense>> {
+        return AppDatabase.getDatabase(context).expenseDao().getAllExpenses()
+    }
+
+    fun getDebtsFlow(context: Context): Flow<List<DebtItem>> {
+        return AppDatabase.getDatabase(context).debtDao().getAllDebts()
+    }
+
+    fun getNotificationsFlow(context: Context): Flow<List<AppNotification>> {
+        return AppDatabase.getDatabase(context).notificationDao().getAllNotifications()
     }
 }

@@ -51,27 +51,27 @@ enum class DebtType { I_OWE, THEY_OWE }
 @Keep
 data class PaymentRecord(val amount: Double, val date: Date = Date())
 
-@Keep
-data class DebtItem(
-    val id: String = UUID.randomUUID().toString(),
-    val name: String,
-    var amount: Double,
-    var paidAmount: Double = 0.0,
-    var isPaid: Boolean = false,
-    val type: DebtType,
-    val date: Date,
-    var deadline: Date? = null,
-    var isArchived: Boolean = false,
-    // HIGHLIGHT: Hidden fields to keep amounts safe when disconnected from Main Balance
-    var archivedAmount: Double = 0.0,
-    var archivedPaidAmount: Double = 0.0,
-    var paymentHistory: MutableList<PaymentRecord> = mutableListOf()
-) {
-    // Smartly handle UI rendering even if underlying amount is 0 (cut off from main balance)
-    val displayAmount: Double get() = if (isArchived && amount == 0.0 && archivedAmount > 0.0) archivedAmount else amount
-    val displayPaidAmount: Double get() = if (isArchived && amount == 0.0 && archivedAmount > 0.0) archivedPaidAmount else paidAmount
-    val remainingAmount: Double get() = displayAmount - displayPaidAmount
-}
+//@Keep
+//data class DebtItem(
+//    val id: String = UUID.randomUUID().toString(),
+//    val name: String,
+//    var amount: Double,
+//    var paidAmount: Double = 0.0,
+//    var isPaid: Boolean = false,
+//    val type: DebtType,
+//    val date: Date,
+//    var deadline: Date? = null,
+//    var isArchived: Boolean = false,
+//    // HIGHLIGHT: Hidden fields to keep amounts safe when disconnected from Main Balance
+//    var archivedAmount: Double = 0.0,
+//    var archivedPaidAmount: Double = 0.0,
+//    var paymentHistory: MutableList<PaymentRecord> = mutableListOf()
+//) {
+//    // Smartly handle UI rendering even if underlying amount is 0 (cut off from main balance)
+//    val displayAmount: Double get() = if (isArchived && amount == 0.0 && archivedAmount > 0.0) archivedAmount else amount
+//    val displayPaidAmount: Double get() = if (isArchived && amount == 0.0 && archivedAmount > 0.0) archivedPaidAmount else paidAmount
+//    val remainingAmount: Double get() = displayAmount - displayPaidAmount
+//}
 
 fun isThisMonth(date: Date): Boolean {
     val currentCal = Calendar.getInstance()
@@ -84,7 +84,6 @@ fun isThisMonth(date: Date): Boolean {
 @Composable
 fun DebtManagerScreen() {
     val context = LocalContext.current
-    var debts by remember { mutableStateOf(DataManager.getDebts(context)) }
     var showAddSheet by remember { mutableStateOf(false) }
 
     var showHistory by remember { mutableStateOf(false) }
@@ -95,7 +94,7 @@ fun DebtManagerScreen() {
     var debtToArchiveBySwipe by remember { mutableStateOf<DebtItem?>(null) }
     var revertSwipeDeleteBalance by remember { mutableStateOf(true) }
 
-    LaunchedEffect(Unit) { debts = DataManager.getDebts(context) }
+    val debts by DataManager.getDebtsFlow(context).collectAsState(initial = emptyList())
 
     val (thisMonthDebts, pastMonthDebts, historyDebts, archivedDebts) = remember(debts, showHistory, showArchive) {
         val archived = debts.filter { it.isArchived }.sortedByDescending { it.date }
@@ -170,7 +169,7 @@ fun DebtManagerScreen() {
                         } else {
                             if (thisMonthDebts.isNotEmpty()) {
                                 items(thisMonthDebts, key = { it.id }) { debt ->
-                                    DebtRowCard(debt = debt, cardColor = cardColor, textColor = textColor, isHistory = false, isArchive = false, modifier = Modifier.animateItem(), onCardClick = { selectedDebtForPayment = debt }, onMarkPaid = { processMarkPaid(context, debt) { debts = DataManager.getDebts(context) } }, onSwipeAction = { debtToArchiveBySwipe = debt; revertSwipeDeleteBalance = true })
+                                    DebtRowCard(debt = debt, cardColor = cardColor, textColor = textColor, isHistory = false, isArchive = false, modifier = Modifier.animateItem(), onCardClick = { selectedDebtForPayment = debt }, onMarkPaid = { processMarkPaid(context, debt) {  } }, onSwipeAction = { debtToArchiveBySwipe = debt; revertSwipeDeleteBalance = true })
                                     Spacer(modifier = Modifier.height(12.dp))
                                 }
                             }
@@ -183,7 +182,7 @@ fun DebtManagerScreen() {
                                     }
                                 }
                                 items(pastMonthDebts, key = { it.id }) { debt ->
-                                    DebtRowCard(debt = debt, cardColor = cardColor, textColor = textColor, isHistory = false, isArchive = false, modifier = Modifier.animateItem(), onCardClick = { selectedDebtForPayment = debt }, onMarkPaid = { processMarkPaid(context, debt) { debts = DataManager.getDebts(context) } }, onSwipeAction = { debtToArchiveBySwipe = debt; revertSwipeDeleteBalance = true })
+                                    DebtRowCard(debt = debt, cardColor = cardColor, textColor = textColor, isHistory = false, isArchive = false, modifier = Modifier.animateItem(), onCardClick = { selectedDebtForPayment = debt }, onMarkPaid = { processMarkPaid(context, debt) {  } }, onSwipeAction = { debtToArchiveBySwipe = debt; revertSwipeDeleteBalance = true })
                                     Spacer(modifier = Modifier.height(12.dp))
                                 }
                             }
@@ -234,7 +233,7 @@ fun DebtManagerScreen() {
                             }
                             DataManager.updateDebt(context, updated)
                         }
-                        debts = DataManager.getDebts(context)
+                        
                         debtToArchiveBySwipe = null
                     }) { Text(if (showArchive) "Delete" else "Archive", color = if (showArchive) Color(0xFFFF3B30) else Color(0xFFFF9500), fontWeight = FontWeight.Bold) }
                 },
@@ -251,7 +250,7 @@ fun DebtManagerScreen() {
                             onDismiss = { showAddSheet = false },
                             onSave = { newDebt ->
                                 DataManager.addDebt(context, newDebt)
-                                debts = DataManager.getDebts(context)
+                                
                                 showAddSheet = false
                                 showHistory = false
                                 showArchive = false
@@ -274,7 +273,7 @@ fun DebtManagerScreen() {
                                 val newPaidAmount = current.paidAmount + safeAmount
                                 val updatedHistory = current.paymentHistory.toMutableList().apply { add(PaymentRecord(amount = safeAmount, date = Date())) }
                                 val updatedDebt = current.copy(paidAmount = newPaidAmount, isPaid = newPaidAmount >= current.amount, paymentHistory = updatedHistory)
-                                DataManager.updateDebt(context, updatedDebt); debts = DataManager.getDebts(context); selectedDebtForPayment = updatedDebt
+                                DataManager.updateDebt(context, updatedDebt); ; selectedDebtForPayment = updatedDebt
                             },
                             onEditPayment = { oldRecord, newAmount ->
                                 val current = selectedDebtForPayment!!
@@ -287,7 +286,7 @@ fun DebtManagerScreen() {
                                     updatedHistory[index] = oldRecord.copy(amount = safeNewAmount)
                                     val finalPaidAmount = paidWithoutRecord + safeNewAmount
                                     val updatedDebt = current.copy(paidAmount = finalPaidAmount, isPaid = finalPaidAmount >= current.amount, paymentHistory = updatedHistory)
-                                    DataManager.updateDebt(context, updatedDebt); debts = DataManager.getDebts(context); selectedDebtForPayment = updatedDebt
+                                    DataManager.updateDebt(context, updatedDebt); ; selectedDebtForPayment = updatedDebt
                                 }
                             },
                             onDeletePayment = { recordToRemove, revertBalance ->
@@ -300,16 +299,16 @@ fun DebtManagerScreen() {
                                 val updatedHistory = current.paymentHistory.toMutableList().apply { remove(recordToRemove) }
                                 val safePaidAmount = maxOf(0.0, current.paidAmount - recordToRemove.amount)
                                 val updatedDebt = current.copy(paidAmount = safePaidAmount, isPaid = safePaidAmount >= current.amount, paymentHistory = updatedHistory)
-                                DataManager.updateDebt(context, updatedDebt); debts = DataManager.getDebts(context); selectedDebtForPayment = updatedDebt
+                                DataManager.updateDebt(context, updatedDebt); ; selectedDebtForPayment = updatedDebt
                             },
                             onEditMainDebt = { newName, newTotalAmount, newDeadline ->
                                 val current = selectedDebtForPayment!!
                                 val updatedDebt = current.copy(name = newName, amount = newTotalAmount, deadline = newDeadline, isPaid = current.paidAmount >= newTotalAmount)
-                                DataManager.updateDebt(context, updatedDebt); debts = DataManager.getDebts(context); selectedDebtForPayment = updatedDebt
+                                DataManager.updateDebt(context, updatedDebt); ; selectedDebtForPayment = updatedDebt
                             },
                             onRestoreDebtFromComplete = {
                                 val updatedDebt = selectedDebtForPayment!!.copy(isPaid = false, paidAmount = 0.0, paymentHistory = mutableListOf())
-                                DataManager.updateDebt(context, updatedDebt); debts = DataManager.getDebts(context); selectedDebtForPayment = null; showHistory = false; showArchive = false
+                                DataManager.updateDebt(context, updatedDebt); ; selectedDebtForPayment = null; showHistory = false; showArchive = false
                             },
                             onArchiveDebt = { revertBalance ->
                                 val current = selectedDebtForPayment!!
@@ -320,7 +319,7 @@ fun DebtManagerScreen() {
                                         amount = 0.0, paidAmount = 0.0 // Instantly cuts connection from Main Balance
                                     )
                                 } else { current.copy(isArchived = true) }
-                                DataManager.updateDebt(context, updated); debts = DataManager.getDebts(context); selectedDebtForPayment = null
+                                DataManager.updateDebt(context, updated); ; selectedDebtForPayment = null
                             },
                             onPermanentDelete = {
                                 val current = selectedDebtForPayment!!
@@ -329,7 +328,7 @@ fun DebtManagerScreen() {
                                     if (impact > 0) DataManager.addIncome(context, Date(), impact, SaveOp.ADD)
                                     else if (impact < 0) DataManager.addExpense(context, Date(), ExpenseCategory.OTHERS, -impact, SaveOp.ADD)
                                 }
-                                DataManager.deleteDebt(context, current.id); debts = DataManager.getDebts(context); selectedDebtForPayment = null
+                                DataManager.deleteDebt(context, current.id); ; selectedDebtForPayment = null
                             },
                             onRestoreFromArchive = {
                                 val current = selectedDebtForPayment!!
@@ -337,7 +336,7 @@ fun DebtManagerScreen() {
                                 val updated = if (current.amount == 0.0 && current.archivedAmount > 0.0) {
                                     current.copy(isArchived = false, amount = current.archivedAmount, paidAmount = current.archivedPaidAmount)
                                 } else { current.copy(isArchived = false) }
-                                DataManager.updateDebt(context, updated); debts = DataManager.getDebts(context); selectedDebtForPayment = null; showArchive = false
+                                DataManager.updateDebt(context, updated); ; selectedDebtForPayment = null; showArchive = false
                             }
                         )
                     }

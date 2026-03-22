@@ -1,5 +1,7 @@
 package com.example.myapplication
 
+
+import androidx.compose.runtime.collectAsState
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -33,14 +35,15 @@ import androidx.navigation.NavController
 import java.text.SimpleDateFormat
 import java.util.*
 
-data class AppNotification(
-    val id: String = UUID.randomUUID().toString(),
-    val title: String,
-    val message: String,
-    val timestamp: Long,
-    val type: String = "REMINDER",
-    val isRead: Boolean = false
-)
+
+//data class AppNotification(
+//    val id: String = UUID.randomUUID().toString(),
+//    val title: String,
+//    val message: String,
+//    val timestamp: Long,
+//    val type: String = "REMINDER",
+//    val isRead: Boolean = false
+//)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,7 +59,7 @@ fun NotificationScreen(navController: NavController) {
     val textColor = if (ThemeState.isDark.value) Color.White else Color.Black
     val iconColor = if (ThemeState.isDark.value) Color.White else Color.Black
 
-    var notifications by remember { mutableStateOf(DataManager.getNotifications(context)) }
+    val notifications by DataManager.getNotificationsFlow(context).collectAsState(initial = emptyList())
 
     var showClearDialog by remember { mutableStateOf(false) }
     var deleteDebtsAlso by remember { mutableStateOf(false) }
@@ -71,7 +74,6 @@ fun NotificationScreen(navController: NavController) {
         if (notifications.any { !it.isRead }) {
             kotlinx.coroutines.delay(500) // একটু কম ডিলে, যাতে ফাস্ট কাজ করে
             DataManager.markAllNotificationsAsRead(context)
-            notifications = DataManager.getNotifications(context)
 
             // HIGHLIGHT: হোম স্ক্রিনের লাল ডট গায়েব করার ব্রডকাস্ট!
             val intent = Intent("ACTION_UPDATE_RED_DOT")
@@ -136,7 +138,7 @@ fun NotificationScreen(navController: NavController) {
                         }
                     },
                     confirmButton = {
-                        Button(onClick = { DataManager.clearAllNotifications(context, keepDebts = !deleteDebtsAlso); notifications = DataManager.getNotifications(context); showClearDialog = false; deleteDebtsAlso = false }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("Clear All", color = Color.White, fontWeight = FontWeight.Bold) }
+                        Button(onClick = { DataManager.clearAllNotifications(context, keepDebts = !deleteDebtsAlso); ; showClearDialog = false; deleteDebtsAlso = false }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("Clear All", color = Color.White, fontWeight = FontWeight.Bold) }
                     },
                     dismissButton = { TextButton(onClick = { showClearDialog = false }) { Text("Cancel", color = Color.Gray) } }
                 )
@@ -158,15 +160,15 @@ fun NotificationScreen(navController: NavController) {
                     // HIGHLIGHT: Passing isAutoDownloadOn to SwipeableNotificationCard
                     if (today.isNotEmpty()) {
                         item { SectionHeader("Today") }
-                        items(today, key = { it.id }) { notif -> SwipeableNotificationCard(notif, cardColor, textColor, isAutoDownloadOn, { selectedNotif = it }) { d -> DataManager.deleteNotification(context, d.id); notifications = DataManager.getNotifications(context) } }
+                        items(today, key = { it.id }) { notif -> SwipeableNotificationCard(notif, cardColor, textColor, isAutoDownloadOn, { selectedNotif = it }) { d -> DataManager.deleteNotification(context, d.id);  } }
                     }
                     if (yesterday.isNotEmpty()) {
                         item { SectionHeader("Yesterday") }
-                        items(yesterday, key = { it.id }) { notif -> SwipeableNotificationCard(notif, cardColor, textColor, isAutoDownloadOn, { selectedNotif = it }) { d -> DataManager.deleteNotification(context, d.id); notifications = DataManager.getNotifications(context) } }
+                        items(yesterday, key = { it.id }) { notif -> SwipeableNotificationCard(notif, cardColor, textColor, isAutoDownloadOn, { selectedNotif = it }) { d -> DataManager.deleteNotification(context, d.id);  } }
                     }
                     if (older.isNotEmpty()) {
                         item { SectionHeader("Earlier") }
-                        items(older, key = { it.id }) { notif -> SwipeableNotificationCard(notif, cardColor, textColor, isAutoDownloadOn, { selectedNotif = it }) { d -> DataManager.deleteNotification(context, d.id); notifications = DataManager.getNotifications(context) } }
+                        items(older, key = { it.id }) { notif -> SwipeableNotificationCard(notif, cardColor, textColor, isAutoDownloadOn, { selectedNotif = it }) { d -> DataManager.deleteNotification(context, d.id);  } }
                     }
                     item { Spacer(modifier = Modifier.height(80.dp)) }
                 }

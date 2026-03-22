@@ -442,7 +442,7 @@ fun ProfileScreen(navController: NavController) {
 
                     // --- 6. ABOUT ---
                     ProfileAestheticCard(title = "About", cardColor = cardColor, isDark = isDark) {
-                        SyncOptionItem(icon = Icons.Outlined.Info, title = "About Application", subtitle = "Version 1.2.0", iconColor = primaryColor, textColor = textColor) { showAppInfoDialog = true }
+                        SyncOptionItem(icon = Icons.Outlined.Info, title = "About Application", subtitle = "Version 2.0.0", iconColor = primaryColor, textColor = textColor) { showAppInfoDialog = true }
                         HorizontalDivider(modifier = Modifier.padding(start = 72.dp), color = Color.Gray.copy(alpha = 0.15f))
                         SyncOptionItem(icon = Icons.Outlined.Code, title = "Developer Info", subtitle = "Built by Arpon Sarker", iconColor = purpleColor, textColor = textColor) { showDevInfoDialog = true }
                     }

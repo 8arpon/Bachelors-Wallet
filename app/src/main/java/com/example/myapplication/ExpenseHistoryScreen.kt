@@ -1,5 +1,6 @@
 package com.example.myapplication
 
+import androidx.compose.runtime.collectAsState
 import androidx.annotation.Keep
 import android.content.Context
 import android.graphics.Canvas
@@ -41,18 +42,18 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
-@Keep
-data class DailyExpense(
-    val id: String = UUID.randomUUID().toString(),
-    val date: Date,
-    val income: Double,
-    val breakfast: Double,
-    val lunch: Double,
-    val dinner: Double,
-    val others: Double
-) {
-    val totalExpense: Double get() = breakfast + lunch + dinner + others
-}
+//@Keep
+//data class DailyExpense(
+//    val id: String = UUID.randomUUID().toString(),
+//    val date: Date,
+//    val income: Double,
+//    val breakfast: Double,
+//    val lunch: Double,
+//    val dinner: Double,
+//    val others: Double
+//) {
+//    val totalExpense: Double get() = breakfast + lunch + dinner + others
+//}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,11 +64,12 @@ fun ExpenseHistoryScreen() {
     var listFilter by remember { mutableStateOf("All") }
     var selectedEntry by remember { mutableStateOf<DailyExpense?>(null) }
 
-    var allExpenses by remember { mutableStateOf(DataManager.getExpenses(context)) }
+    val allExpenses by DataManager.getExpensesFlow(context).collectAsState(initial = emptyList())
+
     var expenses by remember { mutableStateOf(listOf<DailyExpense>()) }
 
     LaunchedEffect(selectedDate, allExpenses) {
-        allExpenses = DataManager.getExpenses(context)
+
         val cal = Calendar.getInstance()
         cal.time = selectedDate
         val targetMonth = cal.get(Calendar.MONTH)
