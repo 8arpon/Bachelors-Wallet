@@ -678,7 +678,7 @@ fun ProfileScreen(navController: NavController) {
                         Box(modifier = Modifier.size(72.dp).clip(RoundedCornerShape(18.dp)).background(Brush.linearGradient(listOf(Color(0xFF007AFF), Color(0xFF00C6FF)))), contentAlignment = Alignment.Center) { Icon(Icons.Default.ShoppingCart, contentDescription = "App Icon", tint = Color.White, modifier = Modifier.size(36.dp)) }
                         Spacer(modifier = Modifier.height(16.dp))
                         Text("Bachelor's Wallet", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = textColor)
-                        Text("Version 1.2.0", fontSize = 14.sp, color = Color(0xFF007AFF), fontWeight = FontWeight.Medium)
+                        Text("Version 2.0.0", fontSize = 14.sp, color = Color(0xFF007AFF), fontWeight = FontWeight.Medium)
                         Spacer(modifier = Modifier.height(16.dp))
                         Text("Your smart personal finance companion. Easily track your daily budget, manage debts, and save more with a clean and aesthetic interface.", fontSize = 14.sp, color = Color.Gray, textAlign = TextAlign.Center, lineHeight = 20.sp)
                     }
