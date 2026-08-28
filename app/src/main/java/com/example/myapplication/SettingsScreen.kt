@@ -411,7 +411,7 @@ fun SettingsScreen(navController: NavController) {
                             if (update != null && update.hasUpdate) {
                                 updateInfoFound = update
                             } else {
-                                Toast.makeText(context, "🎉 You're on the latest version (v2.3.0)!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "🎉 You're on the latest version (v2.1.0)!", Toast.LENGTH_SHORT).show()
                             }
                         } catch (e: Exception) {
                             isCheckingUpdate = false
@@ -420,7 +420,7 @@ fun SettingsScreen(navController: NavController) {
                     }
                 }
                 HorizontalDivider(modifier = Modifier.padding(start = 72.dp), color = Color.Gray.copy(alpha = 0.15f))
-                SyncOptionItem(icon = Icons.Outlined.Info, title = "About Application", subtitle = "Version 2.3.0", iconColor = primaryColor, textColor = textColor) { showAppInfoDialog = true }
+                SyncOptionItem(icon = Icons.Outlined.Info, title = "About Application", subtitle = "Version 2.1.0", iconColor = primaryColor, textColor = textColor) { showAppInfoDialog = true }
                 HorizontalDivider(modifier = Modifier.padding(start = 72.dp), color = Color.Gray.copy(alpha = 0.15f))
                 SyncOptionItem(icon = Icons.Outlined.Code, title = "Developer Info", subtitle = "Built by Arpon Sarker", iconColor = primaryColor, textColor = textColor) { showDevInfoDialog = true }
             }
@@ -705,7 +705,7 @@ fun SettingsScreen(navController: NavController) {
                         Box(modifier = Modifier.size(72.dp).clip(RoundedCornerShape(18.dp)).background(ThemeState.headerGradient.value), contentAlignment = Alignment.Center) { Icon(Icons.Default.ShoppingCart, contentDescription = "App Icon", tint = Color.White, modifier = Modifier.size(36.dp)) }
                         Spacer(modifier = Modifier.height(16.dp))
                         Text("Bachelor's Wallet", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = textColor)
-                        Text("Version 2.3.0", fontSize = 14.sp, color = primaryColor, fontWeight = FontWeight.Bold)
+                        Text("Version 2.1.0", fontSize = 14.sp, color = primaryColor, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(16.dp))
                         Text("Your smart personal finance companion. Easily track your daily budget, manage debts, and save more with a clean and aesthetic interface.", fontSize = 14.sp, color = Color.Gray, textAlign = TextAlign.Center, lineHeight = 20.sp)
                     }

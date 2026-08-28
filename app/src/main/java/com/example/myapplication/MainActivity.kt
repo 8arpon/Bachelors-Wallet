@@ -363,7 +363,7 @@ fun MainApp() {
                     contentAlignment = Alignment.CenterStart
                 ) {
                     Text(
-                        text = "Version 2.3.0 • Bachelors Wallet",
+                        text = "Version 2.1.0 • Bachelors Wallet",
                         fontSize = 11.sp,
                         color = Color.Gray,
                         fontWeight = FontWeight.Medium

@@ -6,7 +6,7 @@
 [![Compose](https://img.shields.io/badge/UI-Jetpack%20Compose%20(Material%203)-blue?style=for-the-badge&logo=jetpackcompose)](https://developer.android.com/jetpack/compose)
 [![Firebase](https://img.shields.io/badge/Backend-Firebase%20Firestore-orange?style=for-the-badge&logo=firebase)](https://firebase.google.com/)
 [![AI Powered](https://img.shields.io/badge/Code-100%25%20AI%20Generated%20(Google%20Gemini)-red?style=for-the-badge&logo=google)](https://deepmind.google/technologies/gemini/)
-[![Latest Release](https://img.shields.io/badge/Version-v2.3.0-brightgreen?style=for-the-badge)](https://github.com/8arpon/Bachelors-Wallet/releases)
+[![Latest Release](https://img.shields.io/badge/Version-v2.1.0-brightgreen?style=for-the-badge)](https://github.com/8arpon/Bachelors-Wallet/releases)
 
 ---
 
@@ -18,11 +18,11 @@ This entire application stands as a real-world demonstration of **Advanced Agent
 
 ---
 
-## 🚀 Key Ecosystem Modules & Features
+## 🚀 What's New in Version 2.1.0?
 
 ```
 ================================================================================
-  🔥 COMPLETE FEATURE ECOSYSTEM OVERVIEW
+  🔥 VERSION 2.1.0 MAJOR UPGRADE SUMMARY
 ================================================================================
   1. 🌐 GitHub In-App Auto-Update Engine (1-Tap Fast Delivery)
   2. 🏠 Complete Mess & Hostel Management (Roommates, Meals, Bazaar & Meal Rate)
