@@ -7,16 +7,18 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 
 @Database(
-    entities = [DailyExpense::class, DebtItem::class, AppNotification::class],
-    version = 1,
+    entities = [TransactionEntry::class, DebtItem::class, AppNotification::class, CustomCategory::class, ScheduledTransaction::class],
+    version = 7,
     exportSchema = false
 )
-@TypeConverters(Converters::class) // Apni je file ta prothome baniyechen
+@TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
 
-    abstract fun expenseDao(): ExpenseDao
+    abstract fun transactionDao(): TransactionDao // HIGHLIGHT: নতুন DAO
     abstract fun debtDao(): DebtDao
     abstract fun notificationDao(): NotificationDao
+    abstract fun categoryDao(): CategoryDao
+    abstract fun scheduledTransactionDao(): ScheduledTransactionDao
 
     companion object {
         @Volatile
@@ -29,7 +31,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "budget_wallet_database"
                 )
-                    .fallbackToDestructiveMigration()
+                    .fallbackToDestructiveMigration() // যেহেতু ডাটাবেস আর্কিটেকচার পুরো পাল্টে গেছে, পুরনো ডাটা মুছে যাবে
                     .build()
                 INSTANCE = instance
                 instance

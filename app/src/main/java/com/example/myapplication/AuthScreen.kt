@@ -80,6 +80,7 @@ fun AuthScreen(onAuthSuccess: () -> Unit) {
                 isLoading = true
                 CloudSyncManager.auth.signInWithCredential(credential)
                     .addOnSuccessListener {
+                        PremiumManager.initialize(context)
                         CloudSyncManager.restoreFromCloud(context) { _, _ ->
                             isLoading = false
                             onAuthSuccess()
@@ -188,12 +189,14 @@ fun AuthScreen(onAuthSuccess: () -> Unit) {
                 if (isLogin) {
                     auth.signInWithEmailAndPassword(email, password)
                         .addOnSuccessListener {
+                            PremiumManager.initialize(context)
                             CloudSyncManager.restoreFromCloud(context) { _, _ -> isLoading = false; onAuthSuccess() }
                         }
                         .addOnFailureListener { isLoading = false; Toast.makeText(context, it.localizedMessage, Toast.LENGTH_LONG).show() }
                 } else {
                     auth.createUserWithEmailAndPassword(email, password)
                         .addOnSuccessListener {
+                            PremiumManager.initialize(context)
                             CloudSyncManager.backupToCloud(context) { _, _ -> isLoading = false; onAuthSuccess() }
                         }
                         .addOnFailureListener { isLoading = false; Toast.makeText(context, it.localizedMessage, Toast.LENGTH_LONG).show() }

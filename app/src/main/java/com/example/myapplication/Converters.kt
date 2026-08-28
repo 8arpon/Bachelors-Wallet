@@ -30,15 +30,32 @@ class Converters {
         return debtType.name
     }
 
-    // PaymentRecord List Converters (For DebtItem)
+    // TransactionType Enum Converters
     @TypeConverter
-    fun fromPaymentRecordList(value: String): MutableList<PaymentRecord> {
-        val listType = object : TypeToken<MutableList<PaymentRecord>>() {}.type
-        return gson.fromJson(value, listType) ?: mutableListOf()
+    fun fromTransactionType(value: String): TransactionType {
+        return TransactionType.valueOf(value)
     }
 
     @TypeConverter
-    fun paymentRecordListToString(list: MutableList<PaymentRecord>): String {
-        return gson.toJson(list)
+    fun transactionTypeToString(type: TransactionType): String {
+        return type.name
+    }
+
+    // PaymentRecord List Converters (For DebtItem)
+    @TypeConverter
+    fun fromPaymentRecordList(value: String?): MutableList<PaymentRecord> {
+        if (value.isNullOrBlank()) return mutableListOf()
+        return try {
+            val listType = object : TypeToken<MutableList<PaymentRecord>>() {}.type
+            val list: MutableList<PaymentRecord>? = gson.fromJson(value, listType)
+            list?.map { it.copy(note = it.note ?: "") }?.toMutableList() ?: mutableListOf()
+        } catch (e: Exception) {
+            mutableListOf()
+        }
+    }
+
+    @TypeConverter
+    fun paymentRecordListToString(list: MutableList<PaymentRecord>?): String {
+        return gson.toJson(list ?: emptyList<PaymentRecord>())
     }
 }
