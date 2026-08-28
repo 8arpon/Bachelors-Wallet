@@ -27,7 +27,7 @@ object DataManager {
     private fun autoBackupIfEnabled(context: Context) {
         val prefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
         val autoEnabled = prefs.getBoolean("pref_auto_cloud_backup", true)
-        if (autoEnabled && CloudSyncManager.isUserLoggedIn() && PremiumManager.isPremium(context)) {
+        if (autoEnabled && CloudSyncManager.isUserLoggedIn() && PremiumManager.isFeatureAccessible("cloud_backup")) {
             CloudSyncManager.backupToCloud(context) { _, _ -> }
         }
     }

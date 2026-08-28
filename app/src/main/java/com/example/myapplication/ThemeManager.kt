@@ -132,7 +132,7 @@ object ThemeState {
 
     fun applyTheme(context: Context, themeId: String, isSystemDark: Boolean) {
         var theme = ALL_THEMES.find { it.id == themeId } ?: ALL_THEMES[0]
-        if (theme.isProOnly && !PremiumManager.isPremium(context)) {
+        if (theme.isProOnly && !PremiumManager.isFeatureAccessible("custom_themes")) {
             theme = ALL_THEMES[0]
         }
         val effectiveDark = if (theme.id == "System") isSystemDark else theme.isDarkTheme

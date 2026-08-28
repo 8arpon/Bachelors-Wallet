@@ -120,7 +120,7 @@ fun MessManagerScreen(navController: NavController) {
             )
         }
     ) { paddingValues ->
-        if (!PremiumManager.isProUser.value) {
+        if (!PremiumManager.isFeatureAccessible("mess_manager")) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()

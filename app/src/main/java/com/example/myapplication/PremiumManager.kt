@@ -41,7 +41,12 @@ object PremiumManager {
     var featureAccessConfig = mutableStateOf<Map<String, String>>(mapOf(
         "mess_manager" to "FREE",
         "ai_assistant" to "PRO",
-        "cloud_backup" to "PRO"
+        "cloud_backup" to "PRO",
+        "custom_themes" to "PRO",
+        "debt_manager" to "FREE",
+        "expense_reports" to "PRO",
+        "scheduled_transactions" to "PRO",
+        "bazaar_analysis" to "PRO"
     ))
 
     private var firestoreListener: ListenerRegistration? = null

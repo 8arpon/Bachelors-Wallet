@@ -390,37 +390,77 @@ fun MainApp() {
             ) {
                 composable("home") { BudgetPlannerScreen(navController, drawerState) }
                 composable("budget") { BudgetScreen() }
-                composable("debt") { DebtManagerScreen() }
-                composable("reports") { ReportsScreen() }
-                composable("mess") {
-                    if (PremiumManager.isFeatureAccessible("mess_manager")) {
-                        MessManagerScreen(navController)
-                    } else {
-                        LaunchedEffect(Unit) {
-                            navController.navigate("subscription") {
-                                popUpTo("home")
-                            }
-                        }
-                    }
-                }
-                composable("mess_analysis") { MessAnalysisScreen(navController) }
-                composable("ai_assistant") {
-                    if (PremiumManager.isFeatureAccessible("ai_assistant")) {
-                        AiAssistantScreen(navController)
-                    } else {
-                        LaunchedEffect(Unit) {
-                            navController.navigate("subscription") {
-                                popUpTo("home")
-                            }
-                        }
-                    }
-                }
-                composable("subscription") { SubscriptionScreen(navController) }
-                composable("auth") { AuthScreen(onAuthSuccess = { navController.navigate("home") { popUpTo("home") { inclusive = true } } }) }
-                composable("notifications") { NotificationScreen(navController) }
-                composable("profile") { ProfileScreen(navController) }
-                composable("scheduled") { ScheduledTransactionsScreen() }
-                composable("settings") { SettingsScreen(navController) }
+                composable("debt") {
+                     if (PremiumManager.isFeatureAccessible("debt_manager")) {
+                         DebtManagerScreen()
+                     } else {
+                         LaunchedEffect(Unit) {
+                             navController.navigate("subscription") {
+                                 popUpTo("home")
+                             }
+                         }
+                     }
+                 }
+                 composable("reports") {
+                     if (PremiumManager.isFeatureAccessible("expense_reports")) {
+                         ReportsScreen()
+                     } else {
+                         LaunchedEffect(Unit) {
+                             navController.navigate("subscription") {
+                                 popUpTo("home")
+                             }
+                         }
+                     }
+                 }
+                 composable("mess") {
+                     if (PremiumManager.isFeatureAccessible("mess_manager")) {
+                         MessManagerScreen(navController)
+                     } else {
+                         LaunchedEffect(Unit) {
+                             navController.navigate("subscription") {
+                                 popUpTo("home")
+                             }
+                         }
+                     }
+                 }
+                 composable("mess_analysis") {
+                     if (PremiumManager.isFeatureAccessible("bazaar_analysis")) {
+                         MessAnalysisScreen(navController)
+                     } else {
+                         LaunchedEffect(Unit) {
+                             navController.navigate("subscription") {
+                                 popUpTo("home")
+                             }
+                         }
+                     }
+                 }
+                 composable("ai_assistant") {
+                     if (PremiumManager.isFeatureAccessible("ai_assistant")) {
+                         AiAssistantScreen(navController)
+                     } else {
+                         LaunchedEffect(Unit) {
+                             navController.navigate("subscription") {
+                                 popUpTo("home")
+                             }
+                         }
+                     }
+                 }
+                 composable("subscription") { SubscriptionScreen(navController) }
+                 composable("auth") { AuthScreen(onAuthSuccess = { navController.navigate("home") { popUpTo("home") { inclusive = true } } }) }
+                 composable("notifications") { NotificationScreen(navController) }
+                 composable("profile") { ProfileScreen(navController) }
+                 composable("scheduled") {
+                     if (PremiumManager.isFeatureAccessible("scheduled_transactions")) {
+                         ScheduledTransactionsScreen()
+                     } else {
+                         LaunchedEffect(Unit) {
+                             navController.navigate("subscription") {
+                                 popUpTo("home")
+                             }
+                         }
+                     }
+                 }
+                 composable("settings") { SettingsScreen(navController) }
             }
             val isMainTab = currentRoute in listOf("home", "budget", "debt", "reports", "mess")
             if (isMainTab) {
@@ -471,12 +511,12 @@ fun FloatingNavBar(navController: NavController, modifier: Modifier = Modifier) 
                 if (showMess) {
                     NavItem(icon = Icons.Default.Groups, title = "Mess", isSelected = currentRoute == "mess") {
                         if (currentRoute != "mess") {
-                            if (!PremiumManager.isProUser.value) {
-                                Toast.makeText(context, "👑 Mess Manager is a PRO Feature!", Toast.LENGTH_SHORT).show()
-                                navController.navigate("subscription") { launchSingleTop = true }
-                            } else {
-                                navController.navigate("mess") { launchSingleTop = true }
-                            }
+                             if (!PremiumManager.isFeatureAccessible("mess_manager")) {
+                                 Toast.makeText(context, "👑 Mess Manager is a PRO Feature!", Toast.LENGTH_SHORT).show()
+                                 navController.navigate("subscription") { launchSingleTop = true }
+                             } else {
+                                 navController.navigate("mess") { launchSingleTop = true }
+                             }
                         }
                     }
                 }
@@ -936,7 +976,7 @@ fun BudgetPlannerScreen(navController: NavController, drawerState: DrawerState) 
                                     .clip(CircleShape)
                                     .background(Brush.linearGradient(listOf(Color(0xFFFFD700), Color(0xFF7B61FF))))
                                     .clickable {
-                                        if (!PremiumManager.isProUser.value) {
+                                        if (!PremiumManager.isFeatureAccessible("ai_assistant")) {
                                             Toast.makeText(context, "👑 AI Financial Agent is a PRO Feature!", Toast.LENGTH_SHORT).show()
                                             navController.navigate("subscription")
                                         } else {

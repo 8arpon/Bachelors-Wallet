@@ -455,7 +455,7 @@ fun SettingsScreen(navController: NavController) {
             Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp).padding(bottom = 40.dp).verticalScroll(rememberScrollState())) {
                 Row(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text("Choose Theme", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = textColor)
-                    if (!PremiumManager.isProUser.value) {
+                    if (!PremiumManager.isFeatureAccessible("custom_themes")) {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = Color(0xFFFFD700).copy(alpha = 0.15f),
@@ -478,14 +478,14 @@ fun SettingsScreen(navController: NavController) {
                             .clip(RoundedCornerShape(16.dp))
                             .background(if (isSelected) theme.accentColor.copy(alpha = 0.12f) else Color.Transparent)
                             .clickable {
-                                if (theme.isProOnly && !PremiumManager.isPremium(context)) {
+                                if (theme.isProOnly && !PremiumManager.isFeatureAccessible("custom_themes")) {
                                     showThemeSheet = false
                                     Toast.makeText(context, "👑 '${theme.name}' is an Exclusive PRO Theme. Please Upgrade or Apply a Coupon!", Toast.LENGTH_LONG).show()
                                     navController.navigate("subscription")
                                 } else {
                                     selectedTheme = theme.id
-                                    ThemeState.applyTheme(context, theme.id, systemTheme)
-                                    showThemeSheet = false
+                                    val isSystemDark = (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+                                    ThemeState.applyTheme(context, theme.id, isSystemDark)
                                 }
                             }
                             .padding(14.dp),
@@ -519,7 +519,7 @@ fun SettingsScreen(navController: NavController) {
                         }
                         if (isSelected) {
                             Icon(Icons.Default.CheckCircle, contentDescription = null, tint = theme.accentColor, modifier = Modifier.size(22.dp))
-                        } else if (theme.isProOnly && !PremiumManager.isProUser.value) {
+                        } else if (theme.isProOnly && !PremiumManager.isFeatureAccessible("custom_themes")) {
                             Icon(Icons.Default.Lock, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(18.dp))
                         }
                     }
