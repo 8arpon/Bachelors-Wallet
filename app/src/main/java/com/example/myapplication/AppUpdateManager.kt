@@ -164,7 +164,7 @@ object AppUpdateManager {
     }
 
     /**
-     * Semantic Version Comparison (e.g. 2.2.1 > 2.2.0, v2.3.0 > 2.2.0)
+     * Semantic Version Comparison (e.g. 2.1.0 > 2.0.0, v2.1.0 > 2.0.0)
      */
     fun isVersionNewer(remote: String, local: String): Boolean {
         val cleanRemote = remote.trim().removePrefix("v").removePrefix("V")
