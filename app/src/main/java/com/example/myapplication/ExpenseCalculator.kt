@@ -1,10 +1,10 @@
 package com.example.myapplication
 
+import android.content.Context
 import java.util.*
 
 object ExpenseCalculator {
 
-    // HIGHLIGHT: মাস চেক করার লজিক
     fun isThisMonth(date: Date): Boolean {
         val cal1 = Calendar.getInstance()
         val cal2 = Calendar.getInstance().apply { time = date }
@@ -12,58 +12,91 @@ object ExpenseCalculator {
                 cal1.get(Calendar.MONTH) == cal2.get(Calendar.MONTH)
     }
 
-    fun getTotalFood(expenses: List<DailyExpense>): Double = expenses.sumOf { it.breakfast + it.lunch + it.dinner }
-    fun getTotalOthers(expenses: List<DailyExpense>): Double = expenses.sumOf { it.others }
-    fun getTotalExpense(expenses: List<DailyExpense>): Double = getTotalFood(expenses) + getTotalOthers(expenses)
-    fun getTotalIncome(expenses: List<DailyExpense>): Double = expenses.sumOf { it.income }
-
-    // HIGHLIGHT: এই মাসের মোট আয় (Home Screen এর জন্য)
-    fun getThisMonthIncome(expenses: List<DailyExpense>): Double {
-        return expenses.filter { isThisMonth(it.date) }.sumOf { it.income }
+    fun isSameMonth(date1: Date, date2: Date): Boolean {
+        val cal1 = Calendar.getInstance().apply { time = date1 }
+        val cal2 = Calendar.getInstance().apply { time = date2 }
+        return cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR) &&
+                cal1.get(Calendar.MONTH) == cal2.get(Calendar.MONTH)
     }
 
-    // HIGHLIGHT: এই মাসের মোট ব্যয় (Home Screen এর জন্য)
-    fun getThisMonthExpense(expenses: List<DailyExpense>): Double {
-        return expenses.filter { isThisMonth(it.date) }.sumOf { it.totalExpense }
+    // --- TRANSACTION CALCULATIONS ---
+    fun getTotalIncome(transactions: List<TransactionEntry>): Double {
+        return transactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
     }
 
-    // HIGHLIGHT: ডাইনামিক মান্থলি ব্যালেন্স (গত মাসের ধার এই মাসে শোধ হলেই কেবল কাউন্ট হবে)
-    fun getThisMonthBalance(context: android.content.Context, expenses: List<DailyExpense>, debts: List<DebtItem>): Double {
-        val baseBalance = getThisMonthIncome(expenses) - getThisMonthExpense(expenses)
+    fun getTotalExpense(transactions: List<TransactionEntry>): Double {
+        return transactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+    }
 
-        // Read user preference
-        val prefs = context.getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
+    fun getThisMonthIncome(transactions: List<TransactionEntry>): Double {
+        return transactions.filter { isThisMonth(it.date) && it.type == TransactionType.INCOME }.sumOf { it.amount }
+    }
+
+    fun getThisMonthExpense(transactions: List<TransactionEntry>): Double {
+        return transactions.filter { isThisMonth(it.date) && it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+    }
+
+    /**
+     * Total Cumulative Wallet Balance:
+     * Reflects the actual real-time funds in the user's wallet with full past-month rollover.
+     * All past and current incomes, expenses, debts (borrowed/lent), and repayments are accounted for.
+     */
+    fun getTotalWalletBalance(context: Context, transactions: List<TransactionEntry>, debts: List<DebtItem>): Double {
+        val baseBalance = getTotalIncome(transactions) - getTotalExpense(transactions)
+        val prefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
         val includeDebt = prefs.getBoolean("pref_include_debt_in_balance", true)
 
-        // If the user disabled integration, just return the base balance
-        if (!includeDebt) {
-            return baseBalance
-        }
+        if (!includeDebt) return baseBalance
 
-        var debtImpact = 0.0
-        for (debt in debts) {
-            // ১. যদি ধার "এই মাসে" নেওয়া বা দেওয়া হয়
-            if (isThisMonth(debt.date)) {
-                if (debt.type == DebtType.I_OWE) debtImpact += debt.amount       // আমি ধার নিলে টাকা আসে (+)
-                else debtImpact -= debt.amount                                   // অন্যকে ধার দিলে টাকা যায় (-)
-            }
-
-            // ২. যদি আগের বা এই মাসের ধারের টাকা "এই মাসে" শোধ করা হয়
-            for (payment in debt.paymentHistory) {
-                if (isThisMonth(payment.date)) {
-                    if (debt.type == DebtType.I_OWE) debtImpact -= payment.amount // আমি শোধ করলে টাকা যায় (-)
-                    else debtImpact += payment.amount                             // কেউ আমাকে শোধ করলে টাকা আসে (+)
-                }
-            }
+        val debtImpact = debts.filter { !it.isArchived && it.isLinkedWithBalance }.sumOf { debt ->
+            if (debt.type == DebtType.I_OWE) debt.remainingAmount
+            else -debt.remainingAmount
         }
         return baseBalance + debtImpact
     }
 
-    fun filterExpenses(expenses: List<DailyExpense>, filterType: String): List<DailyExpense> {
-        return expenses.filter {
+    /**
+     * Current Available Wallet Balance (synonymous with getTotalWalletBalance to ensure past month funds roll over).
+     */
+    fun getThisMonthBalance(context: Context, transactions: List<TransactionEntry>, debts: List<DebtItem>): Double {
+        return getTotalWalletBalance(context, transactions, debts)
+    }
+
+    /**
+     * Calculates the exact debt cashflow that occurred strictly in THIS month:
+     * - New loans created in this month (I_OWE: +amount, THEY_OWE: -amount)
+     * - Repayments made in this month (I_OWE: -paid, THEY_OWE: +paid)
+     */
+    fun getThisMonthDebtFlow(context: Context, debts: List<DebtItem>): Double {
+        val prefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+        val includeDebt = prefs.getBoolean("pref_include_debt_in_balance", true)
+        if (!includeDebt) return 0.0
+
+        var flow = 0.0
+        val linkedDebts = debts.filter { !it.isArchived && it.isLinkedWithBalance }
+
+        for (debt in linkedDebts) {
+            // Did the debt originate this month?
+            if (isThisMonth(debt.date)) {
+                if (debt.type == DebtType.I_OWE) flow += debt.displayAmount
+                else flow -= debt.displayAmount
+            }
+            // Repayments that took place this month
+            for (payment in debt.paymentHistory) {
+                if (isThisMonth(payment.date)) {
+                    if (debt.type == DebtType.I_OWE) flow -= payment.amount
+                    else flow += payment.amount
+                }
+            }
+        }
+        return flow
+    }
+
+    fun filterTransactions(transactions: List<TransactionEntry>, filterType: String): List<TransactionEntry> {
+        return transactions.filter {
             when (filterType) {
-                "In" -> it.income > 0
-                "Out" -> it.totalExpense > 0
+                "In" -> it.type == TransactionType.INCOME
+                "Out" -> it.type == TransactionType.EXPENSE
                 else -> true
             }
         }

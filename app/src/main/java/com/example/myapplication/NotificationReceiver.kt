@@ -47,15 +47,15 @@ class NotificationReceiver : BroadcastReceiver() {
                 }
                 val pendingIntent = PendingIntent.getActivity(context, 100, tapIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
 
-                val expenses = DataManager.getExpenses(context)
+                val transactions = DataManager.getTransactionsSync(context)
                 val debts = DataManager.getDebts(context)
 
                 val todayCal = Calendar.getInstance()
-                val todayExp = expenses.find {
+                val todayTxs = transactions.filter {
                     val cal = Calendar.getInstance().apply { time = it.date }
                     cal.get(Calendar.YEAR) == todayCal.get(Calendar.YEAR) && cal.get(Calendar.DAY_OF_YEAR) == todayCal.get(Calendar.DAY_OF_YEAR)
                 }
-                val hasLoggedToday = todayExp != null && (todayExp.income > 0 || todayExp.breakfast > 0 || todayExp.lunch > 0 || todayExp.dinner > 0 || todayExp.others > 0)
+                val hasLoggedToday = todayTxs.isNotEmpty()
 
                 // 1. Smart Reminder
                 if (isSmartReminder && !hasLoggedToday) {
@@ -67,8 +67,14 @@ class NotificationReceiver : BroadcastReceiver() {
 
                 // 2. Daily Detailed Report
                 if (hasLoggedToday) {
-                    val totalSpent = todayExp!!.breakfast + todayExp.lunch + todayExp.dinner + todayExp.others
-                    val fullReport = "Income: ৳${todayExp.income}\nBreakfast: ৳${todayExp.breakfast}\nLunch: ৳${todayExp.lunch}\nDinner: ৳${todayExp.dinner}\nOthers: ৳${todayExp.others}\nTotal Spent: ৳$totalSpent"
+                    val todayInc = todayTxs.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
+                    val todayExp = todayTxs.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+
+                    val foodCats = listOf("Breakfast", "Lunch", "Dinner", "Food", "Snacks", "Groceries")
+                    val todayFood = todayTxs.filter { it.type == TransactionType.EXPENSE && it.category in foodCats }.sumOf { it.amount }
+                    val todayOthers = todayExp - todayFood
+
+                    val fullReport = "Income: ৳${todayInc.toInt()}\nFood & Groceries: ৳${todayFood.toInt()}\nOthers: ৳${todayOthers.toInt()}\nTotal Spent: ৳${todayExp.toInt()}"
 
                     sendNotification(context, manager, channelId, 1004, "Daily Summary Report", fullReport, "REPORT", pendingIntent, null, true)
 
@@ -80,9 +86,16 @@ class NotificationReceiver : BroadcastReceiver() {
 
                 // 3. Budget Alert
                 if (isBudgetAlert) {
-                    val thisMonthIncome = ExpenseCalculator.getThisMonthIncome(expenses)
-                    val thisMonthExpense = ExpenseCalculator.getThisMonthExpense(expenses)
-                    if (thisMonthIncome > 0 && thisMonthExpense >= (thisMonthIncome * 0.8)) {
+                    val curMonth = todayCal.get(Calendar.MONTH)
+                    val curYear = todayCal.get(Calendar.YEAR)
+                    val monthTxs = transactions.filter {
+                        val c = Calendar.getInstance().apply { time = it.date }
+                        c.get(Calendar.MONTH) == curMonth && c.get(Calendar.YEAR) == curYear
+                    }
+                    val mInc = monthTxs.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
+                    val mExp = monthTxs.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
+
+                    if (mInc > 0 && mExp >= (mInc * 0.8)) {
                         sendNotification(context, manager, channelId, 1002, "Budget Alert! ⚠️", "You have spent over 80% of your monthly income.", "ALERT", pendingIntent, null, true)
                         delay(1000L)
                     }
@@ -91,12 +104,10 @@ class NotificationReceiver : BroadcastReceiver() {
                 // 4. Debt Reminder
                 if (isDebtAlert) {
                     val currentTime = System.currentTimeMillis()
-                    // HIGHLIGHT: Exact days overdue ক্যালকুলেশন
-                    val oldDebts = debts.filter { !it.isPaid && ((currentTime - it.date.time) / 86400000L) >= 15L }
+                    val oldDebts = debts.filter { !it.isPaid && !it.isArchived && ((currentTime - it.date.time) / 86400000L) >= 15L }
                     oldDebts.forEachIndexed { index, debt ->
                         val daysOverdue = ((currentTime - debt.date.time) / 86400000L).toInt()
                         val typeStr = if (debt.type == DebtType.I_OWE) "You owe" else "Owes you"
-                        // মেসেজে Exact days বসানো হয়েছে
                         sendNotification(context, manager, channelId, 1003 + index, "Pending Debt: ${debt.name}", "$typeStr ৳${debt.remainingAmount.toInt()} for $daysOverdue days!", "DEBT", pendingIntent, null, true)
                         delay(1000L)
                     }
@@ -105,8 +116,37 @@ class NotificationReceiver : BroadcastReceiver() {
                 val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
                 val nextIntent = Intent(context, NotificationReceiver::class.java)
                 val nextPendingIntent = PendingIntent.getBroadcast(context, 0, nextIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-                try { alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + 86400000L, nextPendingIntent)
-                } catch (e: SecurityException) { alarmManager.set(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + 86400000L, nextPendingIntent) }
+
+                val targetCal = Calendar.getInstance().apply {
+                    val notifTimeStr = prefs.getString("notif_time", "9:00 PM") ?: "9:00 PM"
+                    var hour = 21
+                    var min = 0
+                    try {
+                        val parts = notifTimeStr.split(":", " ")
+                        if (parts.size >= 3) {
+                            val h = parts[0].toInt()
+                            val m = parts[1].toInt()
+                            val amPm = parts[2].uppercase()
+                            hour = if (amPm == "PM" && h < 12) h + 12 else if (amPm == "AM" && h == 12) 0 else h
+                            min = m
+                        }
+                    } catch (e: Exception) { }
+                    set(Calendar.HOUR_OF_DAY, hour)
+                    set(Calendar.MINUTE, min)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                    if (before(Calendar.getInstance())) {
+                        add(Calendar.DAY_OF_YEAR, 1)
+                    }
+                }
+
+                try {
+                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, targetCal.timeInMillis, nextPendingIntent)
+                } catch (e: SecurityException) {
+                    try {
+                        alarmManager.set(AlarmManager.RTC_WAKEUP, targetCal.timeInMillis, nextPendingIntent)
+                    } catch (ex: Exception) { }
+                } catch (e: Exception) { }
 
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -132,7 +172,7 @@ class NotificationReceiver : BroadcastReceiver() {
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
 
-        if (actionIntent != null) builder.addAction(android.R.drawable.ic_input_add, "Add Expense", actionIntent)
+        if (actionIntent != null) builder.addAction(android.R.drawable.ic_input_add, "Add Transaction", actionIntent)
         manager.notify(notifId, builder.build())
     }
 }

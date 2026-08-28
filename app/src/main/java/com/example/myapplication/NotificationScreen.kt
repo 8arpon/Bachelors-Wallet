@@ -1,6 +1,5 @@
 package com.example.myapplication
 
-
 import androidx.compose.runtime.collectAsState
 import android.content.Context
 import android.content.Intent
@@ -16,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -35,22 +35,11 @@ import androidx.navigation.NavController
 import java.text.SimpleDateFormat
 import java.util.*
 
-
-//data class AppNotification(
-//    val id: String = UUID.randomUUID().toString(),
-//    val title: String,
-//    val message: String,
-//    val timestamp: Long,
-//    val type: String = "REMINDER",
-//    val isRead: Boolean = false
-//)
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationScreen(navController: NavController) {
     val context = LocalContext.current
 
-    // HIGHLIGHT: Fetching Auto Download Status
     val prefs = remember { context.getSharedPreferences("app_settings", Context.MODE_PRIVATE) }
     val isAutoDownloadOn = remember { prefs.getBoolean("pref_auto_download", false) }
 
@@ -69,13 +58,10 @@ fun NotificationScreen(navController: NavController) {
 
     var selectedNotif by remember { mutableStateOf<AppNotification?>(null) }
 
-    // HIGHLIGHT: Mark all as read and remove Red Dot
     LaunchedEffect(Unit) {
         if (notifications.any { !it.isRead }) {
-            kotlinx.coroutines.delay(500) // একটু কম ডিলে, যাতে ফাস্ট কাজ করে
+            kotlinx.coroutines.delay(500)
             DataManager.markAllNotificationsAsRead(context)
-
-            // HIGHLIGHT: হোম স্ক্রিনের লাল ডট গায়েব করার ব্রডকাস্ট!
             val intent = Intent("ACTION_UPDATE_RED_DOT")
             context.sendBroadcast(intent)
         }
@@ -85,7 +71,6 @@ fun NotificationScreen(navController: NavController) {
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().background(bgColor).statusBarsPadding()) {
-            // --- HEADER ---
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 15.dp)
@@ -93,7 +78,7 @@ fun NotificationScreen(navController: NavController) {
                 Box(
                     modifier = Modifier.size(40.dp).clip(CircleShape).background(cardColor).clickable { navController.popBackStack() },
                     contentAlignment = Alignment.Center
-                ) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = iconColor, modifier = Modifier.size(20.dp)) }
+                ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = iconColor, modifier = Modifier.size(20.dp)) }
                 Spacer(modifier = Modifier.width(15.dp))
                 Text(if (currentFilter == "ALL") "Notifications" else "$currentFilter", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = textColor)
 
@@ -138,15 +123,16 @@ fun NotificationScreen(navController: NavController) {
                         }
                     },
                     confirmButton = {
-                        Button(onClick = { DataManager.clearAllNotifications(context, keepDebts = !deleteDebtsAlso); ; showClearDialog = false; deleteDebtsAlso = false }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("Clear All", color = Color.White, fontWeight = FontWeight.Bold) }
+                        Button(onClick = { DataManager.clearAllNotifications(context, keepDebts = !deleteDebtsAlso); showClearDialog = false; deleteDebtsAlso = false }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("Clear All", color = Color.White, fontWeight = FontWeight.Bold) }
                     },
                     dismissButton = { TextButton(onClick = { showClearDialog = false }) { Text("Cancel", color = Color.Gray) } }
                 )
             }
 
+            val primaryColor = ThemeState.primaryAccent.value
             if (filteredList.isEmpty()) {
                 Column(modifier = Modifier.fillMaxSize().padding(bottom = 50.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(modifier = Modifier.size(80.dp).clip(CircleShape).background(Color(0xFF007AFF).copy(alpha = 0.1f)), contentAlignment = Alignment.Center) { Icon(Icons.Default.NotificationsOff, contentDescription = null, tint = Color(0xFF007AFF), modifier = Modifier.size(40.dp)) }
+                    Box(modifier = Modifier.size(80.dp).clip(CircleShape).background(primaryColor.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) { Icon(Icons.Default.NotificationsOff, contentDescription = null, tint = primaryColor, modifier = Modifier.size(40.dp)) }
                     Spacer(modifier = Modifier.height(20.dp))
                     Text("All Caught Up!", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = textColor)
                     Text("No notifications found.", fontSize = 14.sp, color = Color.Gray)
@@ -157,7 +143,6 @@ fun NotificationScreen(navController: NavController) {
                     val yesterday = filteredList.filter { isYesterday(it.timestamp) }
                     val older = filteredList.filter { !isToday(it.timestamp) && !isYesterday(it.timestamp) }
 
-                    // HIGHLIGHT: Passing isAutoDownloadOn to SwipeableNotificationCard
                     if (today.isNotEmpty()) {
                         item { SectionHeader("Today") }
                         items(today, key = { it.id }) { notif -> SwipeableNotificationCard(notif, cardColor, textColor, isAutoDownloadOn, { selectedNotif = it }) { d -> DataManager.deleteNotification(context, d.id);  } }
@@ -175,7 +160,6 @@ fun NotificationScreen(navController: NavController) {
             }
         }
 
-        // --- AESTHETIC POP-UP REDESIGN ---
         selectedNotif?.let { notif ->
             Dialog(
                 onDismissRequest = { selectedNotif = null },
@@ -224,28 +208,7 @@ fun NotificationScreen(navController: NavController) {
 
                             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
 
-                                // HIGHLIGHT: Dynamic Pop-Up content for Reports based on Auto-Download
                                 if (notif.type == "REPORT") {
-                                    if (isAutoDownloadOn) {
-                                        Surface(color = Color(0xFF34C759).copy(alpha = 0.1f), shape = RoundedCornerShape(12.dp)) {
-                                            Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF34C759), modifier = Modifier.size(16.dp))
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text("Auto-downloaded at ${formatTimestamp(notif.timestamp)}", color = Color(0xFF34C759), fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                            }
-                                        }
-                                    } else {
-                                        Surface(color = Color.Gray.copy(alpha = 0.1f), shape = RoundedCornerShape(12.dp)) {
-                                            Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                                Icon(Icons.Default.Info, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(16.dp))
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text("Auto-download is OFF", color = Color.Gray, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                            }
-                                        }
-                                    }
-
-                                    Spacer(modifier = Modifier.height(4.dp))
-
                                     Button(
                                         onClick = {
                                             exportAestheticPDF(context, notif.message, notif.timestamp)
@@ -258,7 +221,7 @@ fun NotificationScreen(navController: NavController) {
                                     ) {
                                         Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color.White)
                                         Spacer(modifier = Modifier.width(8.dp))
-                                        Text(if (isAutoDownloadOn) "Download Again" else "Download PDF Report", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                        Text("Download PDF Report", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                     }
                                 }
 
@@ -295,7 +258,7 @@ fun SwipeableNotificationCard(
     notification: AppNotification,
     cardColor: Color,
     textColor: Color,
-    isAutoDownloadOn: Boolean, // HIGHLIGHT: Received state
+    isAutoDownloadOn: Boolean,
     onClick: (AppNotification) -> Unit,
     onDelete: (AppNotification) -> Unit
 ) {
@@ -317,7 +280,8 @@ fun SwipeableNotificationCard(
             ) { Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.White, modifier = Modifier.size(24.dp)) }
         },
         content = {
-            val unreadHighlight = if (!notification.isRead) Color(0xFF007AFF).copy(alpha = 0.05f) else Color.Transparent
+            val primaryColor = ThemeState.primaryAccent.value
+            val unreadHighlight = if (!notification.isRead) primaryColor.copy(alpha = 0.05f) else Color.Transparent
             Surface(
                 shape = RoundedCornerShape(12.dp), color = cardColor, shadowElevation = 0.dp, border = BorderStroke(0.5.dp, Color.Gray.copy(alpha = 0.15f)),
                 modifier = Modifier.fillMaxWidth().clickable { onClick(notification) }
@@ -327,7 +291,7 @@ fun SwipeableNotificationCard(
                     val iconTint = when (notification.type) {
                         "ALERT" -> Color(0xFFFF3B30); "DEBT" -> Color(0xFFFF9500)
                         "REPORT" -> Color(0xFF8E2DE2); "SUCCESS" -> Color(0xFF34C759)
-                        else -> Color(0xFF007AFF)
+                        else -> primaryColor
                     }
                     val iconImage = when (notification.type) {
                         "ALERT" -> Icons.Default.Warning; "DEBT" -> Icons.Default.MonetizationOn
@@ -342,7 +306,7 @@ fun SwipeableNotificationCard(
                     Column(modifier = Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(notification.title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = textColor, modifier = Modifier.weight(1f))
-                            if (!notification.isRead) Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF007AFF)))
+                            if (!notification.isRead) Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(primaryColor))
                         }
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(notification.message, fontSize = 12.sp, color = Color.Gray, lineHeight = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -350,7 +314,6 @@ fun SwipeableNotificationCard(
                         Text(formatTimestamp(notification.timestamp), fontSize = 10.sp, color = Color.LightGray, fontWeight = FontWeight.Medium)
                     }
 
-                    // HIGHLIGHT: Hide Icon if Auto-Download is ON
                     if (notification.type == "REPORT" && !isAutoDownloadOn) {
                         Spacer(modifier = Modifier.width(8.dp))
                         Box(
@@ -367,11 +330,10 @@ fun SwipeableNotificationCard(
     )
 }
 
-// HIGHLIGHT: Bank Statement Style Professional PDF Generator
 fun exportAestheticPDF(context: android.content.Context, content: String, timestamp: Long) {
     try {
-        val dateStr = SimpleDateFormat("dd_MMM_yyyy", Locale.getDefault()).format(Date(timestamp))
-        val fileName = "Wallet_Statement_$dateStr.pdf"
+        val dateStr = SimpleDateFormat("dd_MMM_yyyy", Locale.US).format(Date(timestamp))
+        val fileName = "${dateStr}_Daily_Statement_BachelorsWallet.pdf"
 
         val pdfDocument = android.graphics.pdf.PdfDocument()
         val pageInfo = android.graphics.pdf.PdfDocument.PageInfo.Builder(595, 842, 1).create()
@@ -388,7 +350,7 @@ fun exportAestheticPDF(context: android.content.Context, content: String, timest
         val subtitlePaint = android.graphics.Paint().apply { color = android.graphics.Color.rgb(200, 200, 200); textSize = 14f; textAlign = android.graphics.Paint.Align.CENTER }
 
         canvas.drawText("BACHELOR'S WALLET", width / 2f, 65f, titlePaint)
-        canvas.drawText("Daily Transaction Statement", width / 2f, 95f, subtitlePaint)
+        canvas.drawText("Daily Ledger Statement", width / 2f, 95f, subtitlePaint)
         val displayDate = SimpleDateFormat("EEEE, dd MMMM yyyy", Locale.getDefault()).format(Date(timestamp))
         canvas.drawText("Date: $displayDate", width / 2f, 120f, subtitlePaint)
 
@@ -415,10 +377,6 @@ fun exportAestheticPDF(context: android.content.Context, content: String, timest
             if (parts.size >= 2) {
                 val label = parts[0].trim()
                 val valueStr = parts.subList(1, parts.size).joinToString(":").trim()
-                val cleanString = valueStr.replace(Regex("[^0-9.]"), "")
-                val valueNum = cleanString.toDoubleOrNull() ?: 0.0
-
-                if (valueNum == 0.0 && !label.contains("Total", ignoreCase = true)) continue
 
                 if (rowIndex % 2 == 0 && !label.contains("Total", ignoreCase = true)) {
                     canvas.drawRect(60f, yPos - 25f, width - 60f, yPos + 15f, bgPaint)
@@ -429,9 +387,9 @@ fun exportAestheticPDF(context: android.content.Context, content: String, timest
                     canvas.drawLine(60f, yPos - 35f, width - 60f, yPos - 35f, linePaint)
                     textPaintLeft.isFakeBoldText = true; textPaintLeft.textSize = 18f
                     textPaintRight.isFakeBoldText = true; textPaintRight.textSize = 20f
-                    textPaintRight.color = android.graphics.Color.rgb(211, 47, 47) // Red
+                    textPaintRight.color = android.graphics.Color.rgb(211, 47, 47)
                 } else if (label.contains("Income", ignoreCase = true)) {
-                    textPaintRight.color = android.graphics.Color.rgb(56, 142, 60) // Green
+                    textPaintRight.color = android.graphics.Color.rgb(56, 142, 60)
                 } else {
                     textPaintLeft.isFakeBoldText = false; textPaintLeft.textSize = 16f
                     textPaintRight.isFakeBoldText = false; textPaintRight.textSize = 16f
@@ -476,7 +434,6 @@ fun isToday(timestamp: Long): Boolean {
     val cal2 = Calendar.getInstance().apply { timeInMillis = timestamp }
     return cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR) && cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
 }
-
 
 fun isYesterday(timestamp: Long): Boolean {
     val cal1 = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }

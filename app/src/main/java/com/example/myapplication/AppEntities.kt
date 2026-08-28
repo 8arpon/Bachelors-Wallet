@@ -2,41 +2,63 @@ package com.example.myapplication
 
 import androidx.room.Entity
 import androidx.room.Ignore
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import java.util.Date
 import java.util.UUID
 
-@Entity(tableName = "daily_expenses")
-data class DailyExpense(
+@Entity(
+    tableName = "transaction_entries",
+    indices = [
+        Index("date"),
+        Index("type"),
+        Index("category")
+    ]
+)
+data class TransactionEntry(
     @PrimaryKey val id: String = UUID.randomUUID().toString(),
     val date: Date,
-    val income: Double,
-    val breakfast: Double,
-    val lunch: Double,
-    val dinner: Double,
-    val others: Double
-) {
-    // HIGHLIGHT: Room কে বলে দিচ্ছি এটা ডাটাবেসে সেভ না করতে
-    @get:Ignore
-    val totalExpense: Double get() = breakfast + lunch + dinner + others
+    val type: TransactionType, // INCOME or EXPENSE
+    val category: String, // "Breakfast", "Salary", "Transport", etc.
+    val amount: Double
+)
+
+enum class TransactionType {
+    INCOME, EXPENSE
 }
 
-@Entity(tableName = "debt_items")
+@Entity(tableName = "custom_categories")
+data class CustomCategory(
+    @PrimaryKey val name: String,
+    val addedOn: Long = System.currentTimeMillis()
+)
+
+@Entity(
+    tableName = "debt_items",
+    indices = [
+        Index("isPaid"),
+        Index("isArchived"),
+        Index("date")
+    ]
+)
 data class DebtItem(
     @PrimaryKey val id: String = UUID.randomUUID().toString(),
     val name: String,
     var amount: Double,
     var paidAmount: Double = 0.0,
     var isPaid: Boolean = false,
-    val type: DebtType, // Ensure DebtType is properly defined in your project
+    val type: DebtType,
     val date: Date,
     var deadline: Date? = null,
     var isArchived: Boolean = false,
     var archivedAmount: Double = 0.0,
     var archivedPaidAmount: Double = 0.0,
-    var paymentHistory: MutableList<PaymentRecord> = mutableListOf()
+    var paymentHistory: MutableList<PaymentRecord> = mutableListOf(),
+    var isLinkedWithBalance: Boolean = true,
+    var note: String = ""
 ) {
-    // HIGHLIGHT: এগুলোতেও Ignore বসানো হলো
+    @get:Ignore
+    val safeNote: String get() = note ?: ""
     @get:Ignore
     val displayAmount: Double get() = if (isArchived && amount == 0.0 && archivedAmount > 0.0) archivedAmount else amount
     @get:Ignore
@@ -45,7 +67,13 @@ data class DebtItem(
     val remainingAmount: Double get() = displayAmount - displayPaidAmount
 }
 
-@Entity(tableName = "app_notifications")
+@Entity(
+    tableName = "app_notifications",
+    indices = [
+        Index("timestamp"),
+        Index("isRead")
+    ]
+)
 data class AppNotification(
     @PrimaryKey val id: String = UUID.randomUUID().toString(),
     val title: String,
@@ -53,4 +81,22 @@ data class AppNotification(
     val timestamp: Long,
     val type: String = "REMINDER",
     val isRead: Boolean = false
+)
+
+@Entity(
+    tableName = "scheduled_transactions",
+    indices = [
+        Index("isActive"),
+        Index("nextExecutionDate")
+    ]
+)
+data class ScheduledTransaction(
+    @PrimaryKey val id: String = UUID.randomUUID().toString(),
+    val title: String,
+    val amount: Double,
+    val category: String,
+    val type: TransactionType,
+    val frequency: String, // "Daily", "Weekly", "Monthly"
+    val nextExecutionDate: Date,
+    val isActive: Boolean = true
 )

@@ -1,17 +1,61 @@
+# Built-in Gradle / Android Studio ignores
 *.iml
 .gradle
 /local.properties
+local.properties
+secrets.properties
+*.env
+
+# IDE files
+.idea/
 /.idea/caches
 /.idea/libraries
 /.idea/modules.xml
 /.idea/workspace.xml
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
+.vscode/
+
+# OS files
 .DS_Store
+Thumbs.db
+
+# Build outputs & Release Artifacts
 /build
+app/build/
 /captures
 .externalNativeBuild
 .cxx
-local.properties
-app/google-services.json
+.kotlin/
+app/release/
+release/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.dm
+
+# Keystore & Signing Secrets (CRITICAL - DO NOT COMMIT)
+*.jks
+*.keystore
+*.p12
+*.key
+*.pem
+signing.properties
+
+# Firebase & Google API configuration
 google-services.json
+app/google-services.json
+**/google-services.json
+
+# AI Assistant / Agent Scratch Files & Guides
+.gemini/
+.codex/
+.agents/
+graphify-out/
+GEMINI.md
+AGENTS.md
+GITHUB_AUTO_UPDATE_GUIDE.md
+
+# Admin Dashboard
+admin-dashboard/
