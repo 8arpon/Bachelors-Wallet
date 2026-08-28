@@ -33,7 +33,8 @@ object CloudSyncManager {
 
         userRef.get().addOnSuccessListener { document ->
             val updates = hashMapOf<String, Any>()
-            updates["email"] = user.email ?: ""
+            updates["email"] = (user.email ?: "").lowercase().trim()
+            updates["uid"] = user.uid
             updates["displayName"] = if (!name.isNullOrBlank()) name else (user.displayName ?: "User")
 
             if (isRemovingPhoto) {

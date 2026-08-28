@@ -81,6 +81,10 @@ fun AuthScreen(onAuthSuccess: () -> Unit) {
                 CloudSyncManager.auth.signInWithCredential(credential)
                     .addOnSuccessListener {
                         PremiumManager.initialize(context)
+                        val currentUser = CloudSyncManager.auth.currentUser
+                        val displayName = currentUser?.displayName ?: "User"
+                        CloudSyncManager.saveOrUpdateUserProfile(context, displayName, null, false) { _, _ -> }
+
                         CloudSyncManager.restoreFromCloud(context) { _, _ ->
                             isLoading = false
                             onAuthSuccess()
@@ -190,6 +194,10 @@ fun AuthScreen(onAuthSuccess: () -> Unit) {
                     auth.signInWithEmailAndPassword(email, password)
                         .addOnSuccessListener {
                             PremiumManager.initialize(context)
+                            val currentUser = auth.currentUser
+                            val displayName = currentUser?.displayName ?: "User"
+                            CloudSyncManager.saveOrUpdateUserProfile(context, displayName, null, false) { _, _ -> }
+
                             CloudSyncManager.restoreFromCloud(context) { _, _ -> isLoading = false; onAuthSuccess() }
                         }
                         .addOnFailureListener { isLoading = false; Toast.makeText(context, it.localizedMessage, Toast.LENGTH_LONG).show() }
@@ -197,6 +205,9 @@ fun AuthScreen(onAuthSuccess: () -> Unit) {
                     auth.createUserWithEmailAndPassword(email, password)
                         .addOnSuccessListener {
                             PremiumManager.initialize(context)
+                            val fullName = "$firstName $lastName".trim()
+                            CloudSyncManager.saveOrUpdateUserProfile(context, fullName, profileImageUri, false) { _, _ -> }
+
                             CloudSyncManager.backupToCloud(context) { _, _ -> isLoading = false; onAuthSuccess() }
                         }
                         .addOnFailureListener { isLoading = false; Toast.makeText(context, it.localizedMessage, Toast.LENGTH_LONG).show() }

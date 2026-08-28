@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.widget.Toast
 import androidx.compose.runtime.mutableStateOf
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.SetOptions
@@ -70,7 +71,9 @@ object PremiumManager {
     /**
      * Redeem Promo Code:
      * - Checks Firestore collection 'promo_codes' or DEFAULT_PROMO_CODES
-     * - Binds PRO permanently to the logged in Gmail account (Firebase Auth)
+     * - Validates isActive, expiration timestamp, and max redemption usage limits
+     * - Prevents duplicate redemption by the same user
+     * - Binds PRO permanently/duration-based to the logged in Gmail account (Firebase Auth)
      */
     fun redeemCoupon(
         context: Context,
@@ -88,6 +91,8 @@ object PremiumManager {
             onComplete(false, "⚠️ Please login with your Google/Gmail account first so your PRO License is permanently attached to your email!")
             return
         }
+
+        val userKey = authUser.email?.trim()?.lowercase() ?: authUser.uid
 
         // 1. Check local default codes first
         val defaultPlan = DEFAULT_PROMO_CODES[code]
@@ -109,6 +114,39 @@ object PremiumManager {
             db.collection("promo_codes").document(code).get()
                 .addOnSuccessListener { doc ->
                     if (doc != null && doc.exists()) {
+                        // A. Check if code is active
+                        val isActive = doc.getBoolean("isActive") ?: true
+                        if (!isActive) {
+                            onComplete(false, "⛔ This promo code is currently disabled or inactive.")
+                            return@addOnSuccessListener
+                        }
+
+                        // B. Check Expiration Date
+                        val validUntil = doc.getLong("validUntil") ?: doc.getLong("expiresAt") ?: 0L
+                        if (validUntil > 0L && System.currentTimeMillis() > validUntil) {
+                            val sdf = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+                            val dateStr = sdf.format(Date(validUntil))
+                            onComplete(false, "⏰ This promo code expired on $dateStr.")
+                            return@addOnSuccessListener
+                        }
+
+                        // C. Check Maximum Redemptions Limit
+                        val maxUses = doc.getLong("maxUses") ?: doc.getLong("maxUsage") ?: 0L
+                        val currentCount = doc.getLong("usageCount") ?: 0L
+                        if (maxUses > 0L && currentCount >= maxUses) {
+                            onComplete(false, "🎟️ This promo code has reached its maximum limit of $maxUses uses.")
+                            return@addOnSuccessListener
+                        }
+
+                        // D. Prevent duplicate redemption by same user
+                        @Suppress("UNCHECKED_CAST")
+                        val usedByList = (doc.get("usedBy") as? List<String>) ?: emptyList()
+                        if (usedByList.any { it.trim().equals(userKey, ignoreCase = true) }) {
+                            onComplete(false, "⚠️ You have already redeemed this promo code for your account (${authUser.email}).")
+                            return@addOnSuccessListener
+                        }
+
+                        // E. Calculate PRO duration granted
                         val planName = doc.getString("plan") ?: "PRO Lifetime VIP"
                         val durationDaysDoc = doc.getLong("durationDays") ?: doc.getLong("duration") ?: 0L
                         val explicitExpiry = doc.getLong("expiry") ?: -1L
@@ -134,6 +172,7 @@ object PremiumManager {
                             else -> -1L
                         }
 
+                        // Activate PRO for user
                         activateProForUser(
                             context = context,
                             user = authUser,
@@ -142,10 +181,21 @@ object PremiumManager {
                             expiryTimestamp = calculatedExpiry
                         )
 
-                        // Increment usage count in Firestore
-                        val currentCount = doc.getLong("usageCount") ?: 0
-                        db.collection("promo_codes").document(code)
-                            .set(mapOf("usageCount" to (currentCount + 1)), SetOptions.merge())
+                        // Atomically increment usage count & add user to usedBy array in Firestore
+                        try {
+                            db.collection("promo_codes").document(code).update(
+                                "usageCount", FieldValue.increment(1),
+                                "usedBy", FieldValue.arrayUnion(userKey)
+                            ).addOnFailureListener {
+                                db.collection("promo_codes").document(code).set(
+                                    mapOf(
+                                        "usageCount" to (currentCount + 1),
+                                        "usedBy" to (usedByList + userKey)
+                                    ),
+                                    SetOptions.merge()
+                                )
+                            }
+                        } catch (_: Exception) {}
 
                         onComplete(true, "🎉 Promo code '$code' activated $planName successfully for ${authUser.email}!")
                     } else {
@@ -216,11 +266,18 @@ object PremiumManager {
             val db = FirebaseFirestore.getInstance()
             val proData = hashMapOf(
                 "is_premium" to true,
+                "isPro" to true,
+                "isProMember" to true,
+                "is_pro_member" to true,
                 "pro_plan" to plan,
+                "proPlan" to plan,
                 "pro_coupon" to (coupon ?: ""),
-                "email" to (user.email ?: ""),
+                "coupon" to (coupon ?: ""),
+                "email" to (user.email?.lowercase()?.trim() ?: ""),
+                "uid" to user.uid,
                 "pro_unlocked_at" to System.currentTimeMillis(),
-                "pro_expiry" to expiryTimestamp
+                "pro_expiry" to expiryTimestamp,
+                "proExpiryTimestamp" to expiryTimestamp
             )
             db.collection("users").document(user.uid).set(proData, SetOptions.merge())
         } catch (e: Exception) {

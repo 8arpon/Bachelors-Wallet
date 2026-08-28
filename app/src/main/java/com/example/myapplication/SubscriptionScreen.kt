@@ -4,6 +4,12 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.util.Base64
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -18,10 +24,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.HourglassTop
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -48,6 +56,7 @@ import androidx.navigation.NavController
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -66,7 +75,8 @@ data class DynamicSubscriptionPlan(
     val period: String = "/ 1 Year (365 Days)",
     val subtitle: String = "৳৫৮ / month (Save 42%) • Most Popular for Students",
     val tag: String? = "POPULAR CHOICE ⭐",
-    val durationDays: Int = 365
+    val durationDays: Int = 365,
+    val isStudentOffer: Boolean = false
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -92,6 +102,11 @@ fun SubscriptionScreen(navController: NavController) {
     // Pending payment request state
     var pendingTrxId by remember { mutableStateOf<String?>(null) }
     var pendingPlanName by remember { mutableStateOf<String?>(null) }
+
+    // Student Verification State
+    var studentVerificationStatus by remember { mutableStateOf<String?>(null) }
+    var showStudentVerificationDialog by remember { mutableStateOf(false) }
+    var isSubmittingStudentId by remember { mutableStateOf(false) }
 
     // Dynamic Subscription Plans list loaded from Admin Dashboard / Firestore
     var plansList by remember {
@@ -136,7 +151,8 @@ fun SubscriptionScreen(navController: NavController) {
                     val subtitle = doc.getString("subtitle") ?: ""
                     val tag = doc.getString("tag")
                     val durationDays = (doc.getLong("durationDays") ?: 30L).toInt()
-                    list.add(DynamicSubscriptionPlan(doc.id, title, price, period, subtitle, tag, durationDays))
+                    val isStudent = doc.getBoolean("isStudentOffer") ?: doc.getBoolean("isStudent") ?: false
+                    list.add(DynamicSubscriptionPlan(doc.id, title, price, period, subtitle, tag, durationDays, isStudent))
                 }
                 if (list.isNotEmpty()) {
                     plansList = list
@@ -183,6 +199,22 @@ fun SubscriptionScreen(navController: NavController) {
                         } else {
                             pendingTrxId = null
                             pendingPlanName = null
+                        }
+                    }
+
+                // Listen to student verification status
+                val cleanEmail = user.email!!.lowercase().trim()
+                db.collection("student_verifications").document(user.uid)
+                    .addSnapshotListener { doc, _ ->
+                        if (doc != null && doc.exists()) {
+                            studentVerificationStatus = doc.getString("status")
+                        } else {
+                            db.collection("student_verifications").document(cleanEmail)
+                                .addSnapshotListener { emailDoc, _ ->
+                                    if (emailDoc != null && emailDoc.exists()) {
+                                        studentVerificationStatus = emailDoc.getString("status")
+                                    }
+                                }
                         }
                     }
             } catch (e: Exception) { }
@@ -424,9 +456,81 @@ fun SubscriptionScreen(navController: NavController) {
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Pricing Options Selector
+            val publicPlans = plansList.filter { !it.isStudentOffer }
+            val activeStudentOffer = plansList.firstOrNull { it.isStudentOffer }
+
+            // Student Verification Special Banner Card (Shown only if admin created student offer or user applied)
+            if (activeStudentOffer != null || studentVerificationStatus != null) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    color = if (ThemeState.isDark.value) Color(0xFF161F30) else Color(0xFFEFF6FF),
+                    border = BorderStroke(1.2.dp, Color(0xFF38BDF8).copy(alpha = 0.5f)),
+                    shadowElevation = 2.dp
+                ) {
+                    Column(modifier = Modifier.padding(18.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF38BDF8).copy(alpha = 0.18f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.School, contentDescription = "Student", tint = Color(0xFF38BDF8), modifier = Modifier.size(22.dp))
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(activeStudentOffer?.title ?: "Student Verification Offer 🎓", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = textColor)
+                                Text(
+                                    text = when (studentVerificationStatus) {
+                                        "APPROVED" -> "✅ Verified Student Member (${activeStudentOffer?.title ?: "1-Year VIP"} Active)"
+                                        "PENDING" -> "⏳ ID Card in Review by Admin"
+                                        "REJECTED" -> "❌ Rejected. Tap to re-apply with clear photo"
+                                        else -> if (activeStudentOffer != null) "${activeStudentOffer.price} ${activeStudentOffer.period} • ${activeStudentOffer.subtitle}" else "Verified students get 1-Year Free VIP PRO Access!"
+                                    },
+                                    fontSize = 12.sp,
+                                    color = textColor.copy(alpha = 0.8f)
+                                )
+                            }
+                        }
+
+                        if (studentVerificationStatus != "APPROVED") {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Button(
+                                onClick = {
+                                    if (!isLoggedIn) {
+                                        Toast.makeText(context, "Please Log In with Gmail first 🔐", Toast.LENGTH_SHORT).show()
+                                        navController.navigate("auth")
+                                    } else {
+                                        showStudentVerificationDialog = true
+                                    }
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (studentVerificationStatus == "PENDING") Color(0xFFFF9500) else Color(0xFF38BDF8)
+                                ),
+                                modifier = Modifier.fillMaxWidth().height(42.dp)
+                            ) {
+                                Text(
+                                    text = if (studentVerificationStatus == "PENDING") "Under Review ⏳ Tap to Re-submit" else "Apply with Student ID Card 🎓",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            // Pricing Options Selector (Public Standard Plans)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -440,7 +544,8 @@ fun SubscriptionScreen(navController: NavController) {
                     color = textColor
                 )
 
-                plansList.forEachIndexed { index, plan ->
+                val displayPlans = if (publicPlans.isNotEmpty()) publicPlans else plansList
+                displayPlans.forEachIndexed { index, plan ->
                     PlanCard(
                         title = plan.title,
                         price = plan.price,
@@ -545,7 +650,8 @@ fun SubscriptionScreen(navController: NavController) {
 
             val currentMethod = paymentMethodsList.getOrNull(selectedMethodIndex) ?: paymentMethodsList.first()
 
-            val selectedPlan = plansList.getOrElse(selectedPlanIndex.coerceIn(0, plansList.size - 1)) { plansList[0] }
+            val activePublicPlans = plansList.filter { !it.isStudentOffer }.ifEmpty { plansList }
+            val selectedPlan = activePublicPlans.getOrElse(selectedPlanIndex.coerceIn(0, activePublicPlans.size - 1)) { activePublicPlans[0] }
             val planTitle = selectedPlan.title
             val planAmount = selectedPlan.price
             val durationDays = selectedPlan.durationDays.toLong()
@@ -809,6 +915,41 @@ fun SubscriptionScreen(navController: NavController) {
                 }
             }
         }
+
+        if (showStudentVerificationDialog) {
+            StudentVerificationDialog(
+                onDismiss = { showStudentVerificationDialog = false },
+                isSubmitting = isSubmittingStudentId,
+                onSubmit = { institution, studentIdNum, imageBase64 ->
+                    isSubmittingStudentId = true
+                    val currentUser = FirebaseAuth.getInstance().currentUser
+                    val cleanEmail = currentUser?.email?.lowercase()?.trim() ?: ""
+                    val data = hashMapOf(
+                        "userId" to (currentUser?.uid ?: ""),
+                        "userEmail" to cleanEmail,
+                        "institution" to institution,
+                        "studentId" to studentIdNum,
+                        "idCardImage" to imageBase64,
+                        "status" to "PENDING",
+                        "appliedAt" to System.currentTimeMillis()
+                    )
+                    val docKey = currentUser?.uid ?: cleanEmail
+                    val db = FirebaseFirestore.getInstance()
+                    db.collection("student_verifications").document(docKey)
+                        .set(data, SetOptions.merge())
+                        .addOnSuccessListener {
+                            isSubmittingStudentId = false
+                            showStudentVerificationDialog = false
+                            studentVerificationStatus = "PENDING"
+                            Toast.makeText(context, "🎉 Student Verification Submitted! Admin will review your ID card.", Toast.LENGTH_LONG).show()
+                        }
+                        .addOnFailureListener { e ->
+                            isSubmittingStudentId = false
+                            Toast.makeText(context, "Submission failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                }
+            )
+        }
     }
 }
 
@@ -959,5 +1100,167 @@ fun ProFeatureRow(icon: ImageVector, title: String, desc: String, textColor: Col
             Text(text = desc, fontSize = 12.sp, color = Color.Gray)
         }
         Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF34C759), modifier = Modifier.size(20.dp))
+    }
+}
+
+@Composable
+fun StudentVerificationDialog(
+    onDismiss: () -> Unit,
+    onSubmit: (institution: String, studentId: String, imageBase64: String) -> Unit,
+    isSubmitting: Boolean
+) {
+    var institution by remember { mutableStateOf("") }
+    var studentIdNumber by remember { mutableStateOf("") }
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+    var imageBase64String by remember { mutableStateOf("") }
+    val context = LocalContext.current
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            selectedImageUri = uri
+            try {
+                val inputStream = context.contentResolver.openInputStream(uri)
+                val bitmap = BitmapFactory.decodeStream(inputStream)
+                inputStream?.close()
+                if (bitmap != null) {
+                    val maxDim = 800
+                    val ratio = minOf(maxDim.toFloat() / bitmap.width, maxDim.toFloat() / bitmap.height, 1.0f)
+                    val scaled = Bitmap.createScaledBitmap(bitmap, (bitmap.width * ratio).toInt(), (bitmap.height * ratio).toInt(), true)
+                    val outputStream = ByteArrayOutputStream()
+                    scaled.compress(Bitmap.CompressFormat.JPEG, 75, outputStream)
+                    val bytes = outputStream.toByteArray()
+                    imageBase64String = "data:image/jpeg;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP)
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Could not process image: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = if (ThemeState.isDark.value) Color(0xFF181C28) else Color.White,
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .padding(vertical = 24.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(22.dp)
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.School, contentDescription = null, tint = Color(0xFF38BDF8), modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Student Verification 🎓", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    }
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    "Submit your College / University Student ID to unlock 1-Year Free Student VIP Access.",
+                    fontSize = 13.sp,
+                    color = Color.Gray,
+                    textAlign = TextAlign.Start,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                OutlinedTextField(
+                    value = institution,
+                    onValueChange = { institution = it },
+                    label = { Text("College / University Name") },
+                    placeholder = { Text("e.g. Dhaka University / BUET / NSU") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value = studentIdNumber,
+                    onValueChange = { studentIdNumber = it },
+                    label = { Text("Student ID / Roll Number") },
+                    placeholder = { Text("e.g. 2021-12345") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Image Upload Box
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color(0xFF38BDF8).copy(alpha = 0.08f),
+                    border = BorderStroke(1.dp, Color(0xFF38BDF8).copy(alpha = 0.4f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { imagePickerLauncher.launch("image/*") }
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, tint = Color(0xFF38BDF8), modifier = Modifier.size(32.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (selectedImageUri != null) "✅ Photo Selected (Tap to change)" else "📷 Tap to Select Student ID Photo",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = Color(0xFF38BDF8)
+                        )
+                        Text("Clear photo of Student ID card or admit card", fontSize = 11.sp, color = Color.Gray)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Button(
+                    onClick = {
+                        if (institution.trim().isEmpty() || studentIdNumber.trim().isEmpty()) {
+                            Toast.makeText(context, "Please fill in all details", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        if (imageBase64String.isEmpty()) {
+                            Toast.makeText(context, "Please select your student ID photo", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        onSubmit(institution.trim(), studentIdNumber.trim(), imageBase64String)
+                    },
+                    enabled = !isSubmitting,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF38BDF8)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                ) {
+                    if (isSubmitting) {
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Submitting Verification...", color = Color.White)
+                    } else {
+                        Text("Submit Verification 🚀", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 15.sp)
+                    }
+                }
+            }
+        }
     }
 }
