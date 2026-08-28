@@ -376,7 +376,7 @@ fun SettingsScreen(navController: NavController) {
                         textColor = textColor,
                         isChecked = autoCloudBackup
                     ) {
-                        if (it && !PremiumManager.isPremium(context)) {
+                        if (it && !PremiumManager.isFeatureAccessible("cloud_backup")) {
                             Toast.makeText(context, "Automatic Cloud Backup is a PRO feature 👑", Toast.LENGTH_SHORT).show()
                             navController.navigate("subscription")
                         } else {

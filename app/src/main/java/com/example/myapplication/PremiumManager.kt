@@ -37,7 +37,15 @@ object PremiumManager {
     var proExpiryText = mutableStateOf("Free User")
         private set
 
+    // Key: Feature ID, Value: Access Setting ("FREE", "PRO", "TRIAL")
+    var featureAccessConfig = mutableStateOf<Map<String, String>>(mapOf(
+        "mess_manager" to "FREE",
+        "ai_assistant" to "PRO",
+        "cloud_backup" to "PRO"
+    ))
+
     private var firestoreListener: ListenerRegistration? = null
+    private var featuresConfigListener: ListenerRegistration? = null
 
     fun initialize(context: Context) {
         val prefs = getPrefs(context)
@@ -55,6 +63,38 @@ object PremiumManager {
 
         // Attach Realtime Firestore Snapshot Listener if user is logged in
         syncWithFirestoreIfLoggedIn(context)
+
+        // Listen to dynamic feature gating config from dashboard
+        listenToFeaturesConfig()
+    }
+
+    fun listenToFeaturesConfig() {
+        try {
+            val db = FirebaseFirestore.getInstance()
+            featuresConfigListener?.remove()
+            featuresConfigListener = db.collection("config").document("features")
+                .addSnapshotListener { doc, err ->
+                    if (err != null || doc == null || !doc.exists()) return@addSnapshotListener
+                    val updates = mutableMapOf<String, String>()
+                    doc.data?.forEach { (k, v) ->
+                        if (v is String) {
+                            updates[k] = v
+                        }
+                    }
+                    if (updates.isNotEmpty()) {
+                        featureAccessConfig.value = updates
+                    }
+                }
+        } catch (e: Exception) {}
+    }
+
+    fun isFeatureAccessible(featureId: String): Boolean {
+        // If user is PRO -> always granted
+        if (isProUser.value) return true
+        
+        // Otherwise, check paywall status
+        val setting = featureAccessConfig.value[featureId] ?: "PRO"
+        return setting.equals("FREE", ignoreCase = true) || setting.equals("TRIAL", ignoreCase = true)
     }
 
     fun isPremium(context: Context): Boolean {

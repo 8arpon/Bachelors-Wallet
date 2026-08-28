@@ -392,9 +392,29 @@ fun MainApp() {
                 composable("budget") { BudgetScreen() }
                 composable("debt") { DebtManagerScreen() }
                 composable("reports") { ReportsScreen() }
-                composable("mess") { MessManagerScreen(navController) }
+                composable("mess") {
+                    if (PremiumManager.isFeatureAccessible("mess_manager")) {
+                        MessManagerScreen(navController)
+                    } else {
+                        LaunchedEffect(Unit) {
+                            navController.navigate("subscription") {
+                                popUpTo("home")
+                            }
+                        }
+                    }
+                }
                 composable("mess_analysis") { MessAnalysisScreen(navController) }
-                composable("ai_assistant") { AiAssistantScreen(navController) }
+                composable("ai_assistant") {
+                    if (PremiumManager.isFeatureAccessible("ai_assistant")) {
+                        AiAssistantScreen(navController)
+                    } else {
+                        LaunchedEffect(Unit) {
+                            navController.navigate("subscription") {
+                                popUpTo("home")
+                            }
+                        }
+                    }
+                }
                 composable("subscription") { SubscriptionScreen(navController) }
                 composable("auth") { AuthScreen(onAuthSuccess = { navController.navigate("home") { popUpTo("home") { inclusive = true } } }) }
                 composable("notifications") { NotificationScreen(navController) }
